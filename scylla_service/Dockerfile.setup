@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# cqlsh không bắt buộc vì bạn dùng cassandra-driver,
+# nhưng giữ lại tools cơ bản để debug nếu cần.
+RUN pip install --no-cache-dir cassandra-driver==3.29.2
+
+COPY scylla_setup.py /app/scylla_setup.py
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "/app/scylla_setup.py"]

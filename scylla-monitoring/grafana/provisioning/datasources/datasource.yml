@@ -1,0 +1,35 @@
+apiVersion: 1
+datasources:
+- name: prometheus
+  type: prometheus
+  url: http://aprom:9090
+  access: proxy
+  basicAuth: false
+  isDefault: true
+  jsonData:
+    timeInterval: '20s'
+
+- name: loki
+  type: loki
+  url: http://loki:3100
+  access: proxy
+  basicAuth: false
+  isDefault: false
+  jsonData:
+    maxLines: 1000
+
+- name: alertmanager
+  type: alertmanager
+  url: http://aalert:9093
+  access: proxy
+  basicAuth: false
+  jsonData:
+    implementation: prometheus
+
+- name: scylla-datasource
+  type: scylladb-scylla-datasource
+  access: proxy
+  isDefault: false
+  jsonData:
+    host: scylla-node1
+    port: 9042

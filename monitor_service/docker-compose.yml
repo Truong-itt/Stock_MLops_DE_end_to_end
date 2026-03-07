@@ -1,0 +1,122 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+    ports:
+      - 9090:9090
+    networks:
+      - stock-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    env_file:
+      - .env
+    ports:
+      - 3000:3000
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    restart: unless-stopped
+    networks:
+      - stock-network
+    depends_on:
+      - prometheus
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - 8090:8080
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /var/lib/dbus/machine-id:/var/lib/dbus/machine-id:ro
+    networks:
+      - stock-network
+
+  # node-exporter:
+  #   image: prom/node-exporter:latest
+  #   container_name: node-exporter
+  #   ports:
+  #     - "9200:9100"
+  #   restart: unless-stopped
+  #   environment:
+  #     - NODE_ID={{.Node.ID}}
+  #     - NODE_HOSTNAME={{.Node.Hostname}}
+  #   volumes:  
+  #     - /proc:/host/proc:ro 
+  #     - /sys:/host/sys:ro
+  #     - /:/rootfs:ro,rslave
+  #   command:
+  #     - '--path.procfs=/host/proc'
+  #     - '--path.sysfs=/host/sys'
+  #     - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/run/docker.sock)$$'
+  #   networks:
+  #     - stock-network
+
+  # alertmanager:
+  #   image: prom/alertmanager:latest
+  #   container_name: alertmanager
+  #   ports:
+  #     - target: 9093
+  #       published: 9093
+  #       protocol: tcp
+  #       mode: host
+  #   configs:
+  #     - source: alertmanager_config
+  #       target: /etc/alertmanager/alertmanager.yml
+  #     - source: alertmanager_alertsposts_tmp_config
+  #       target: /etc/alertmanager/templates/alertsposts.tmpl
+  #     - source: alertmanager_email_tmp_config
+  #       target: /etc/alertmanager/templates/email.tmpl
+  #   networks:
+  #     - stock-network
+  #   command:
+  #     - '--config.file=/etc/alertmanager/alertmanager.yml'
+  #     - '--web.external-url=http://monitor.rotoro.site'
+
+  promtail_core:
+    image: grafana/promtail:2.9.0
+    container_name: promtail_core
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      # - /home/mention/etl/log/consumer-update:/consumer_update:ro
+      # - /home/mention/etl/log/consumer:/consumer:ro
+      # - /home/mention/etl/log/update_sentiment:/update_sentiment:ro
+      # - /home/gui/kafka_data/configs/kafka_info:/kafka_info:ro
+      # - /home/gui/kafka_data/configs/kafka_info_update:/kafka_info_update:ro
+      # - /home/data_reco:/data_reco:ro
+      # - /home/mention/init-keyword/connector/logs:/init_keyword_connect:ro
+      # - /home/mention/init-keyword/app/logs:/init_keyword_app:ro
+      - ./loki/config/promtail_config_core.yml:/etc/loki/promtail_config_core.yml:ro
+    restart: unless-stopped
+    command: -config.file=/etc/loki/promtail_config_core.yml
+    networks:
+      - stock-network
+
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: loki
+    volumes:
+      - ./loki/config/loki_config.yml:/etc/loki/loki_config.yml
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki_config.yml
+    networks:
+      - stock-network
+
+networks:
+  stock-network:
+    name: stock-network
+    external: true

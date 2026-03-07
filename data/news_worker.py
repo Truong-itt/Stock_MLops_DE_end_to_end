@@ -1,0 +1,310 @@
+"""
+news_worker.py
+──────────────
+Crawl tin tức chứng khoán từ Yahoo Finance RSS / Google News,
+phân tích sentiment đơn giản, ghi vào ScyllaDB stock_news.
+
+Chạy mỗi 5 phút, mỗi lần lấy tin mới cho tất cả symbols.
+"""
+
+import hashlib
+import signal
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+
+import requests
+from bs4 import BeautifulSoup
+
+from cassandra.cluster import Cluster
+
+from logger import get_logger
+
+logger = get_logger()
+
+# ═══════════════════════════════════════════════════════════════════════
+# CONFIG
+# ═══════════════════════════════════════════════════════════════════════
+SCYLLA_HOSTS = ["scylla-node1", "scylla-node2", "scylla-node3"]
+SCYLLA_PORT  = 9042
+SCYLLA_KS    = "stock_data"
+
+POLL_INTERVAL_SEC = 300     # 5 phút
+
+VIETNAM_STOCKS = [
+    "VCB", "BID", "FPT", "HPG", "CTG", "VHM", "TCB", "VPB", "VNM", "MBB",
+    "GAS", "ACB", "MSN", "GVR", "LPB", "SSB", "STB", "VIB", "MWG", "HDB",
+]
+
+INTERNATIONAL_STOCKS = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "AVGO",
+    "JPM", "V", "UNH", "WMT", "MA", "XOM", "JNJ", "PG", "HD", "COST",
+]
+
+ALL_STOCKS = VIETNAM_STOCKS + INTERNATIONAL_STOCKS
+
+# Keyword lists for simple sentiment
+POSITIVE_WORDS = {
+    "surge", "soar", "rally", "gain", "rise", "jump", "upgrade", "bullish",
+    "beat", "outperform", "profit", "growth", "tăng", "lãi", "đột phá",
+    "tích cực", "khởi sắc", "hồi phục", "vượt", "kỷ lục",
+}
+NEGATIVE_WORDS = {
+    "fall", "drop", "crash", "decline", "loss", "plunge", "downgrade", "bearish",
+    "miss", "underperform", "risk", "warning", "giảm", "lỗ", "sụt",
+    "tiêu cực", "rủi ro", "bán tháo", "thua", "cảnh báo",
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SCYLLA CONNECTION
+# ═══════════════════════════════════════════════════════════════════════
+def connect_scylla():
+    for attempt in range(30):
+        try:
+            cluster = Cluster(SCYLLA_HOSTS, port=SCYLLA_PORT)
+            session = cluster.connect(SCYLLA_KS)
+            logger.info("Connected to ScyllaDB")
+            return cluster, session
+        except Exception as e:
+            logger.warning("ScyllaDB not ready (%d/30): %s", attempt + 1, e)
+            time.sleep(5)
+    raise RuntimeError("Cannot connect to ScyllaDB")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SENTIMENT (đơn giản keyword-based)
+# ═══════════════════════════════════════════════════════════════════════
+def compute_sentiment(text: str) -> float:
+    """
+    Trả về score [-1.0, 1.0]:
+      > 0 = positive, < 0 = negative, 0 = neutral
+    """
+    if not text:
+        return 0.0
+    words = text.lower().split()
+    pos = sum(1 for w in words if w in POSITIVE_WORDS)
+    neg = sum(1 for w in words if w in NEGATIVE_WORDS)
+    total = pos + neg
+    if total == 0:
+        return 0.0
+    return round((pos - neg) / total, 4)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# NEWS FETCHERS
+# ═══════════════════════════════════════════════════════════════════════
+def make_article_id(link: str, title: str) -> str:
+    """Tạo article_id ổn định từ link + title."""
+    raw = f"{link}|{title}"
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def fetch_yahoo_rss(symbol: str) -> List[Dict]:
+    """Lấy tin từ Yahoo Finance RSS."""
+    url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+    articles = []
+    try:
+        resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code != 200:
+            return articles
+
+        soup = BeautifulSoup(resp.content, "lxml-xml")
+        items = soup.find_all("item")
+
+        for item in items[:10]:  # tối đa 10 bài mỗi symbol
+            title = item.find("title")
+            link  = item.find("link")
+            desc  = item.find("description")
+            pub   = item.find("pubDate")
+
+            title_text = title.get_text(strip=True) if title else ""
+            link_text  = link.get_text(strip=True) if link else ""
+            desc_text  = desc.get_text(strip=True) if desc else ""
+
+            # Parse pubDate
+            pub_dt = datetime.now(timezone.utc)
+            if pub:
+                try:
+                    from email.utils import parsedate_to_datetime
+                    pub_dt = parsedate_to_datetime(pub.get_text(strip=True))
+                except Exception:
+                    pass
+
+            full_text = f"{title_text} {desc_text}"
+            sentiment = compute_sentiment(full_text)
+
+            articles.append({
+                "stock_code":      symbol,
+                "date":            pub_dt,
+                "article_id":      make_article_id(link_text, title_text),
+                "title":           title_text,
+                "content":         desc_text[:2000],  # giới hạn 2000 ký tự
+                "link":            link_text,
+                "pdf_link":        None,
+                "is_pdf":          False,
+                "sentiment_score": sentiment,
+                "crawled_at":      datetime.now(timezone.utc),
+            })
+
+    except Exception as e:
+        logger.warning("Yahoo RSS error for %s: %s", symbol, e)
+
+    return articles
+
+
+def fetch_google_news(symbol: str) -> List[Dict]:
+    """Lấy tin từ Google News RSS (fallback)."""
+    query = f"{symbol} stock"
+    url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+    articles = []
+    try:
+        resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code != 200:
+            return articles
+
+        soup = BeautifulSoup(resp.content, "lxml-xml")
+        items = soup.find_all("item")
+
+        for item in items[:5]:  # tối đa 5 bài
+            title = item.find("title")
+            link  = item.find("link")
+            pub   = item.find("pubDate")
+
+            title_text = title.get_text(strip=True) if title else ""
+            link_text  = link.get_text(strip=True) if link else ""
+
+            pub_dt = datetime.now(timezone.utc)
+            if pub:
+                try:
+                    from email.utils import parsedate_to_datetime
+                    pub_dt = parsedate_to_datetime(pub.get_text(strip=True))
+                except Exception:
+                    pass
+
+            sentiment = compute_sentiment(title_text)
+
+            articles.append({
+                "stock_code":      symbol,
+                "date":            pub_dt,
+                "article_id":      make_article_id(link_text, title_text),
+                "title":           title_text,
+                "content":         None,
+                "link":            link_text,
+                "pdf_link":        None,
+                "is_pdf":          False,
+                "sentiment_score": sentiment,
+                "crawled_at":      datetime.now(timezone.utc),
+            })
+
+    except Exception as e:
+        logger.warning("Google News error for %s: %s", symbol, e)
+
+    return articles
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# WRITE TO SCYLLA
+# ═══════════════════════════════════════════════════════════════════════
+def save_articles(scylla_session, articles: List[Dict]) -> int:
+    """Ghi articles vào stock_news, skip nếu đã tồn tại."""
+    insert_cql = """
+        INSERT INTO stock_news
+            (stock_code, date, article_id, title, content, link,
+             pdf_link, is_pdf, sentiment_score, crawled_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        IF NOT EXISTS
+    """
+    prepared = scylla_session.prepare(insert_cql)
+
+    inserted = 0
+    for art in articles:
+        try:
+            result = scylla_session.execute(prepared, (
+                art["stock_code"],
+                art["date"],
+                art["article_id"],
+                art["title"],
+                art["content"],
+                art["link"],
+                art["pdf_link"],
+                art["is_pdf"],
+                art["sentiment_score"],
+                art["crawled_at"],
+            ))
+            # IF NOT EXISTS trả về [applied] = True nếu chèn mới
+            if result and hasattr(result, 'one'):
+                row = result.one()
+                if row and getattr(row, 'applied', row[0]):
+                    inserted += 1
+            else:
+                inserted += 1
+        except Exception as e:
+            logger.error("Insert news error (%s): %s", art.get("stock_code"), e)
+
+    return inserted
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# MAIN LOOP
+# ═══════════════════════════════════════════════════════════════════════
+def main():
+    logger.info("Starting news_worker ...")
+
+    cluster, scylla_session = connect_scylla()
+
+    running = True
+
+    def _stop(sig, frame):
+        nonlocal running
+        logger.info("Received signal %s, stopping ...", sig)
+        running = False
+
+    signal.signal(signal.SIGINT, _stop)
+    signal.signal(signal.SIGTERM, _stop)
+
+    while running:
+        total_fetched = 0
+        total_inserted = 0
+
+        for symbol in ALL_STOCKS:
+            # Thử Yahoo Finance RSS trước
+            articles = fetch_yahoo_rss(symbol)
+
+            # Fallback Google News nếu Yahoo không có kết quả
+            if not articles:
+                articles = fetch_google_news(symbol)
+
+            if articles:
+                n = save_articles(scylla_session, articles)
+                total_fetched += len(articles)
+                total_inserted += n
+                if n > 0:
+                    logger.info("[NEWS] %s: %d fetched, %d new", symbol, len(articles), n)
+
+            # Rate limiting
+            time.sleep(1)
+
+            if not running:
+                break
+
+        logger.info("[NEWS CYCLE] Total fetched=%d  new=%d", total_fetched, total_inserted)
+
+        # Đợi đến lần chạy tiếp theo
+        for _ in range(POLL_INTERVAL_SEC):
+            if not running:
+                break
+            time.sleep(1)
+
+    # Cleanup
+    try:
+        scylla_session.shutdown()
+        cluster.shutdown()
+    except Exception:
+        pass
+    logger.info("news_worker stopped.")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,145 @@
+name: scylla-cluster
+
+services:
+  scylla-node1:
+    container_name: scylla-node1
+    image: scylladb/scylla:5.4
+    restart: always
+    ports:
+      - "9042:9042"
+      - "9180:9180"
+      - "8000:8000"
+    command: >
+      --seeds=scylla-node1
+      --listen-address scylla-node1
+      --rpc-address 0.0.0.0
+      --broadcast-rpc-address scylla-node1
+      --api-address 0.0.0.0
+      --smp 3
+      --memory 1024M
+      --overprovisioned 1
+      --internode-compression all
+      --alternator-port 8000
+      --alternator-write-isolation always
+
+    volumes:
+      - scylla-data-node1:/var/lib/scylla
+    environment:
+      - SCYLLA_CLUSTER_NAME=scylla-cluster
+      - SCYLLA_DC=datacenter1
+      - SCYLLA_RACK=rack1
+    networks:
+      - stock-network
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  scylla-node2:
+    container_name: scylla-node2
+    image: scylladb/scylla:5.4
+    restart: always
+    ports:
+      - "9043:9042"
+      - "9181:9180"
+      - "8001:8000"
+    command: >
+      --seeds=scylla-node1
+      --listen-address scylla-node2
+      --rpc-address 0.0.0.0
+      --broadcast-rpc-address scylla-node2
+      --api-address 0.0.0.0
+      --smp 3
+      --memory 1024M
+      --overprovisioned 1
+      --internode-compression all
+      --alternator-port 8000
+      --alternator-write-isolation always
+
+    depends_on:
+      scylla-node1:
+        condition: service_healthy
+    volumes:
+      - scylla-data-node2:/var/lib/scylla
+    environment:
+      - SCYLLA_CLUSTER_NAME=scylla-cluster
+      - SCYLLA_DC=datacenter1
+      - SCYLLA_RACK=rack1
+    networks:
+      - stock-network
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  scylla-node3:
+    container_name: scylla-node3
+    image: scylladb/scylla:5.4
+    restart: always
+    ports:
+      - "9044:9042"
+      - "9182:9180"
+      - "8002:8000"
+
+    command: >
+      --seeds=scylla-node1
+      --listen-address scylla-node3
+      --rpc-address 0.0.0.0
+      --broadcast-rpc-address scylla-node3
+      --api-address 0.0.0.0
+      --smp 3
+      --memory 1024M
+      --overprovisioned 1
+      --internode-compression all
+      --alternator-port 8000
+      --alternator-write-isolation always
+
+    depends_on:
+      scylla-node2:
+        condition: service_healthy
+    volumes:
+      - scylla-data-node3:/var/lib/scylla
+    environment:
+      - SCYLLA_CLUSTER_NAME=scylla-cluster
+      - SCYLLA_DC=datacenter1
+      - SCYLLA_RACK=rack1
+    networks:
+      - stock-network
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  scylla-setup:
+    container_name: scylla-setup
+    build:
+      context: .
+      dockerfile: Dockerfile.setup
+    depends_on:
+      scylla-node1:
+        condition: service_healthy
+      scylla-node2:
+        condition: service_healthy
+      scylla-node3:
+        condition: service_healthy
+    environment:
+      - RUNNING_IN_DOCKER=true
+      # - SCYLLA_CONTACT_POINTS=scylla-node1,scylla-node2,scylla-node3
+    networks:
+      - stock-network
+    restart: "no"
+
+volumes:
+  scylla-data-node1:
+  scylla-data-node2:
+  scylla-data-node3:
+
+networks:
+  stock-network:
+    external: true

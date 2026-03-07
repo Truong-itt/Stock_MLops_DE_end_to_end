@@ -1,0 +1,18 @@
+services:
+  backend:
+    container_name: backend-stock
+    build: ./backend
+    env_file: .env.be
+    ports:
+      - "8020:8010"
+    restart: always
+    networks:
+      - stock-network
+    volumes:
+      - ./logs_callback:/app/logs_callback
+      - ./frontend/public:/app/static:ro
+
+networks:
+  stock-network:
+    name: stock-network
+    external: true

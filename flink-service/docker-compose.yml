@@ -1,0 +1,59 @@
+services:
+
+  # ── Flink JobManager ──────────────────────────────────────────────
+  jobmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jobmanager
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    ports:
+      - "8084:8081"
+    networks:
+      - stock-network
+
+  # ── Flink TaskManager ─────────────────────────────────────────────
+  taskmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskmanager
+    command: taskmanager
+    depends_on:
+      - jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+    networks:
+      - stock-network
+
+  # ── Job Submit (đợi cluster sẵn sàng rồi submit job) ─────────────
+  job-submit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flink-job-submit
+    depends_on:
+      - jobmanager
+      - taskmanager
+    networks:
+      - stock-network
+    restart: "no"
+    command: >
+      bash -c "
+        echo '⏳ Waiting for Flink cluster...' &&
+        sleep 25 &&
+        /opt/flink/bin/flink run -m jobmanager:8081 -c com.stock.StockProcessingJob /opt/flink/usrlib/flink-stock-processing-1.0-SNAPSHOT.jar &&
+        echo '✅ Job submitted successfully'
+      "
+
+networks:
+  stock-network:
+    external: true
+

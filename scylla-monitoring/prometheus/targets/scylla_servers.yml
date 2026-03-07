@@ -1,0 +1,8 @@
+# ScyllaDB cluster nodes - connects via stock-network
+- targets:
+    - scylla-node1:9180
+    - scylla-node2:9180
+    - scylla-node3:9180
+  labels:
+    cluster: scylla-cluster
+    dc: datacenter1

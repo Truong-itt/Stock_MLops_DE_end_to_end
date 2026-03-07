@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Dashboard — Real-Time</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 12 18 12 15 21 9 3 6 12 2 12'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════════ -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+      </svg>
+      <span>StockVN <small>Dashboard</small></span>
+    </div>
+  </div>
+
+  <div class="header-center">
+    <div class="search-box" id="searchBox">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="searchInput" placeholder="Tìm mã cổ phiếu …" autocomplete="off" />
+      <kbd>⌘K</kbd>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="conn-badge" id="connBadge">
+      <span class="dot"></span>
+      <span class="label">Đang kết nối</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- ═══ MAIN ═════════════════════════════════════════════════ -->
+<main class="app">
+
+  <!-- ── Stats Bar ─────────────────────────────────────────── -->
+  <section class="stats-bar" id="statsBar">
+    <div class="stat-card"><span class="stat-label">Tổng mã</span><span class="stat-val" id="sTotal">--</span></div>
+    <div class="stat-card up"><span class="stat-label">Tăng</span><span class="stat-val" id="sUp">--</span></div>
+    <div class="stat-card down"><span class="stat-label">Giảm</span><span class="stat-val" id="sDown">--</span></div>
+    <div class="stat-card"><span class="stat-label">Đứng</span><span class="stat-val" id="sFlat">--</span></div>
+    <div class="stat-card accent"><span class="stat-label">KL tổng</span><span class="stat-val" id="sVol">--</span></div>
+    <div class="stat-card"><span class="stat-label">Cập nhật</span><span class="stat-val mono" id="sTime">--:--:--</span></div>
+  </section>
+
+  <!-- ── Navigation Tabs ───────────────────────────────────── -->
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="market">Bảng giá</button>
+    <button class="tab" data-tab="news">Tin tức</button>
+  </nav>
+
+  <!-- ── Tab: Market ───────────────────────────────────────── -->
+  <section class="tab-content active" id="tab-market">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <select id="sortSelect">
+          <option value="symbol">Sắp xếp: Mã</option>
+          <option value="pct_desc">% Tăng mạnh nhất</option>
+          <option value="pct_asc">% Giảm mạnh nhất</option>
+          <option value="vol_desc">KL cao → thấp</option>
+        </select>
+      </div>
+      <span class="row-count" id="rowCount"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table class="tbl" id="stockTable">
+        <thead>
+          <tr>
+            <th class="sticky-col">Mã</th>
+            <th>Giá</th>
+            <th>Thay đổi</th>
+            <th>%</th>
+            <th>Mở cửa</th>
+            <th>Cao</th>
+            <th>Thấp</th>
+            <th>KL</th>
+            <th>VWAP</th>
+            <th>Ngày</th>
+          </tr>
+        </thead>
+        <tbody id="stockBody">
+          <tr><td colspan="10" class="empty-row"><div class="spinner"></div>Đang tải dữ liệu …</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Tab: News ─────────────────────────────────────────── -->
+  <section class="tab-content" id="tab-news">
+    <div class="news-grid" id="newsGrid">
+      <p class="muted">Đang tải tin tức …</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══ DETAIL DRAWER ════════════════════════════════════════ -->
+<aside class="drawer" id="drawer">
+  <div class="drawer-header">
+    <h2 id="drSymbol">--</h2>
+    <button class="btn-close" id="drawerClose">&times;</button>
+  </div>
+  <div class="drawer-body">
+    <!-- Price hero -->
+    <div class="price-hero">
+      <span class="hero-price" id="drPrice">--</span>
+      <span class="hero-change" id="drChange">--</span>
+    </div>
+    <!-- Info grid -->
+    <div class="info-grid" id="drInfo"></div>
+    <!-- Chart -->
+    <div class="chart-section">
+      <div class="chart-bar">
+        <span class="chart-title">Biểu đồ giá</span>
+        <select id="drInterval">
+          <option value="1s">1s</option>
+          <option value="5s">5s</option>
+          <option value="1m" selected>1m</option>
+          <option value="5m">5m</option>
+          <option value="15m">15m</option>
+          <option value="1h">1h</option>
+        </select>
+      </div>
+      <div class="chart-wrap"><canvas id="drChart"></canvas></div>
+    </div>
+    <!-- News for symbol -->
+    <div class="drawer-news">
+      <h3>Tin tức liên quan</h3>
+      <div id="drNews"><p class="muted">—</p></div>
+    </div>
+  </div>
+</aside>
+<div class="drawer-overlay" id="drawerOverlay"></div>
+
+<!-- ═══ TOAST ════════════════════════════════════════════════ -->
+<div id="toasts" class="toasts"></div>
+
+<!-- ═══ SCRIPTS ══════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

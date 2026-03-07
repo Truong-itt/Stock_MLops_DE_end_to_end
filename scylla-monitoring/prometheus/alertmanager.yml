@@ -1,0 +1,23 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 3h
+  receiver: 'default'
+
+receivers:
+  - name: 'default'
+    # Cấu hình webhook, email, slack... tại đây
+    # Ví dụ webhook:
+    # webhook_configs:
+    #   - url: 'http://your-webhook-url:5001/'
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']

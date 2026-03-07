@@ -1,0 +1,182 @@
+services:
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-1
+    hostname: kafka-1
+    ports:
+      - "9092:9092"
+    networks:
+      - stock-network
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-1:29093,2@kafka-2:29093,3@kafka-3:29093"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    healthcheck:
+      test: kafka-broker-api-versions --bootstrap-server localhost:29092
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-2
+    hostname: kafka-2
+    networks:
+      - stock-network
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-1:29093,2@kafka-2:29093,3@kafka-3:29093"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    healthcheck:
+      test: kafka-broker-api-versions --bootstrap-server localhost:29092
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-3
+    hostname: kafka-3
+    networks:
+      - stock-network
+    environment:
+      KAFKA_NODE_ID: 3
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-1:29093,2@kafka-2:29093,3@kafka-3:29093"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    healthcheck:
+      test: kafka-broker-api-versions --bootstrap-server localhost:29092
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # kafka-setup:
+  #   image: confluentinc/cp-kafka:7.6.0
+  #   container_name: kafka-setup
+  #   depends_on:
+  #     kafka-1:
+  #       condition: service_healthy
+  #     kafka-2:
+  #       condition: service_healthy
+  #     kafka-3:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./log4j.properties:/tmp/log4j.properties:ro
+  #   environment:
+  #     KAFKA_LOG4J_OPTS: "-Dlog4j.configuration=file:/tmp/log4j.properties"
+  #   networks:
+  #     - stock-network
+  #   command: >
+  #     bash -c "echo 'Waiting for Kafka cluster...' &&
+  #     cub kafka-ready -b kafka-1:29092 3 60 &&
+  #     kafka-topics --create --if-not-exists --bootstrap-server kafka-1:29092 --topic stock_price_vn --partitions 20 --replication-factor 3 &&
+  #     kafka-topics --create --if-not-exists --bootstrap-server kafka-1:29092 --topic stock_price_dif --partitions 20 --replication-factor 3 &&
+  #     echo 'Topic stock_price ready (RF=3)'
+  #     "
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-setup
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    volumes:
+      - ./log4j.properties:/tmp/log4j.properties:ro
+      - ./reassign_rf3.json:/tmp/reassign_rf3.json:ro
+    environment:
+      KAFKA_LOG4J_OPTS: "-Dlog4j.configuration=file:/tmp/log4j.properties"
+    networks:
+      - stock-network
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        echo 'Waiting for Kafka cluster...'
+        cub kafka-ready -b kafka-1:29092 3 120
+
+        echo 'Ensure topics exist...'
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_vn  --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_dif --partitions 1 --replication-factor 1
+
+        echo 'Ensure partition count = 20...'
+        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_vn  --partitions 20
+        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_dif --partitions 20
+
+        echo 'Execute reassignment (RF=3)...'
+        kafka-reassign-partitions --bootstrap-server kafka-1:29092 --reassignment-json-file /tmp/reassign_rf3.json --execute
+
+        echo 'Verify reassignment...'
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          kafka-reassign-partitions --bootstrap-server kafka-1:29092 --reassignment-json-file /tmp/reassign_rf3.json --verify || true
+          sleep 3
+        done
+
+        echo 'Describe topics (head):'
+        kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_vn  | head -n 20
+        kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_dif | head -n 20
+
+        echo '✅ Done (partitions=20, RF=3)'
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.0
+    container_name: schema-registry
+    hostname: schema-registry
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    networks:
+      - stock-network
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-1:29092,PLAINTEXT://kafka-2:29092,PLAINTEXT://kafka-3:29092
+
+      # SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-1:29092, PLAINTEXT://kafka-2:29092, PLAINTEXT://kafka-3:29092
+
+networks:
+  stock-network:
+    name: stock-network
+    external : true

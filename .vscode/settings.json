@@ -1,0 +1,38 @@
+{
+    "cassandraLens.connections": [
+        {
+            "id": "4f89efc4-704f-4173-a855-f68e86bb5212",
+            "name": "scylla-cluster",
+            "contactPoints": [
+                "localhost"
+            ],
+            "port": 9042,
+            "localDatacenter": "datacenter1",
+            "keyspace": "stock_data",
+            "auth": {
+                "enabled": false,
+                "hasPassword": false
+            },
+            "ssl": {
+                "enabled": false,
+                "rejectUnauthorized": true
+            },
+            "socket": {},
+            "createdAt": "2026-03-05T07:08:21.975Z",
+            "lastModifiedAt": "2026-03-05T08:31:12.718Z",
+            "lastConnectedAt": "2026-03-05T08:31:12.718Z"
+        }
+    ],
+    "sqltools.connections": [
+        {
+            "server": "localhost",
+            "port": 9042,
+            "previewLimit": 50,
+            "askForPassword": true,
+            "driver": "Scylla",
+            "name": "stock",
+            "group": "stockfinan",
+            "database": "stock_data"
+        }
+    ]
+}
