@@ -1,0 +1,33 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install base Python packages
+RUN pip install --no-cache-dir \
+    confluent-kafka \
+    cassandra-driver \
+    requests \
+    pytz
+
+# Install ML dependencies (transformers + torch)
+RUN pip install --no-cache-dir \
+    torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir \
+    transformers \
+    sentencepiece
+
+# Copy source files
+COPY sentiment_worker.py .
+COPY reprocess_sentiment.py .
+COPY logger.py .
+
+# Pre-download FinBERT model during build (optional, speeds up startup)
+RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='ProsusAI/finbert')" || true
+
+CMD ["python", "-u", "sentiment_worker.py"]

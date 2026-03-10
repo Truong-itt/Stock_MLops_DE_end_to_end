@@ -3,11 +3,13 @@ news_worker.py
 ──────────────
 Crawl tin tức chứng khoán từ Yahoo Finance RSS / Google News,
 phân tích sentiment đơn giản, ghi vào ScyllaDB stock_news.
+Publish tin mới lên Kafka topic 'news-sentiment' để phân tích FinBERT.
 
 Chạy mỗi 5 phút, mỗi lần lấy tin mới cho tất cả symbols.
 """
 
 import hashlib
+import json
 import signal
 import time
 import uuid
@@ -18,6 +20,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from cassandra.cluster import Cluster
+from confluent_kafka import Producer
 
 from logger import get_logger
 
@@ -29,6 +32,9 @@ logger = get_logger()
 SCYLLA_HOSTS = ["scylla-node1", "scylla-node2", "scylla-node3"]
 SCYLLA_PORT  = 9042
 SCYLLA_KS    = "stock_data"
+
+KAFKA_BOOTSTRAP = "kafka-1:29092,kafka-2:29092,kafka-3:29092"
+KAFKA_TOPIC_SENTIMENT = "news-sentiment"
 
 POLL_INTERVAL_SEC = 300     # 5 phút
 
@@ -73,6 +79,58 @@ def connect_scylla():
             logger.warning("ScyllaDB not ready (%d/30): %s", attempt + 1, e)
             time.sleep(5)
     raise RuntimeError("Cannot connect to ScyllaDB")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# KAFKA PRODUCER
+# ═══════════════════════════════════════════════════════════════════════
+def create_kafka_producer():
+    """Create Kafka producer with retry logic."""
+    for attempt in range(30):
+        try:
+            producer = Producer({
+                "bootstrap.servers": KAFKA_BOOTSTRAP,
+                "acks": "all",
+                "retries": 3,
+                "linger.ms": 10,
+            })
+            logger.info("Kafka producer created")
+            return producer
+        except Exception as e:
+            logger.warning("Kafka not ready (%d/30): %s", attempt + 1, e)
+            time.sleep(5)
+    logger.error("Cannot connect to Kafka, continuing without sentiment publishing")
+    return None
+
+
+def delivery_callback(err, msg):
+    """Kafka delivery callback."""
+    if err:
+        logger.warning("Kafka delivery failed: %s", err)
+
+
+def publish_to_kafka(producer, article: Dict):
+    """Publish article to Kafka for sentiment analysis."""
+    if not producer:
+        return
+    
+    try:
+        # Convert datetime to ISO string for JSON serialization
+        data = article.copy()
+        if isinstance(data.get("date"), datetime):
+            data["date"] = data["date"].isoformat()
+        if isinstance(data.get("crawled_at"), datetime):
+            data["crawled_at"] = data["crawled_at"].isoformat()
+        
+        producer.produce(
+            KAFKA_TOPIC_SENTIMENT,
+            key=article["article_id"].encode("utf-8"),
+            value=json.dumps(data).encode("utf-8"),
+            callback=delivery_callback
+        )
+        producer.poll(0)  # Trigger callbacks
+    except Exception as e:
+        logger.warning("Failed to publish to Kafka: %s", e)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -209,8 +267,8 @@ def fetch_google_news(symbol: str) -> List[Dict]:
 # ═══════════════════════════════════════════════════════════════════════
 # WRITE TO SCYLLA
 # ═══════════════════════════════════════════════════════════════════════
-def save_articles(scylla_session, articles: List[Dict]) -> int:
-    """Ghi articles vào stock_news, skip nếu đã tồn tại."""
+def save_articles(scylla_session, articles: List[Dict], kafka_producer=None) -> int:
+    """Ghi articles vào stock_news, skip nếu đã tồn tại. Publish tin mới lên Kafka."""
     insert_cql = """
         INSERT INTO stock_news
             (stock_code, date, article_id, title, content, link,
@@ -221,6 +279,8 @@ def save_articles(scylla_session, articles: List[Dict]) -> int:
     prepared = scylla_session.prepare(insert_cql)
 
     inserted = 0
+    new_articles = []
+    
     for art in articles:
         try:
             result = scylla_session.execute(prepared, (
@@ -240,10 +300,19 @@ def save_articles(scylla_session, articles: List[Dict]) -> int:
                 row = result.one()
                 if row and getattr(row, 'applied', row[0]):
                     inserted += 1
+                    new_articles.append(art)
             else:
                 inserted += 1
+                new_articles.append(art)
         except Exception as e:
             logger.error("Insert news error (%s): %s", art.get("stock_code"), e)
+
+    # Publish new articles to Kafka for FinBERT sentiment analysis
+    if kafka_producer and new_articles:
+        for art in new_articles:
+            publish_to_kafka(kafka_producer, art)
+        kafka_producer.flush()  # Ensure all messages are sent
+        logger.info("[KAFKA] Published %d articles to %s", len(new_articles), KAFKA_TOPIC_SENTIMENT)
 
     return inserted
 
@@ -255,6 +324,9 @@ def main():
     logger.info("Starting news_worker ...")
 
     cluster, scylla_session = connect_scylla()
+    
+    # Initialize Kafka producer for sentiment analysis pipeline
+    kafka_producer = create_kafka_producer()
 
     running = True
 
@@ -286,7 +358,7 @@ def main():
                             break
 
             if articles:
-                n = save_articles(scylla_session, articles)
+                n = save_articles(scylla_session, articles, kafka_producer)
                 total_fetched += len(articles)
                 total_inserted += n
                 if n > 0:
@@ -308,6 +380,8 @@ def main():
 
     # Cleanup
     try:
+        if kafka_producer:
+            kafka_producer.flush()
         scylla_session.shutdown()
         cluster.shutdown()
     except Exception:

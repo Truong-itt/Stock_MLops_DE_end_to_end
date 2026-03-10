@@ -28,12 +28,36 @@ services:
   news-worker:
     container_name: news-worker
     build: .
-    command: ["python", "news_worker.py"]
+    command: ["python", "-u", "news_worker.py"]
     restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./log:/var/log/stockraw/
     networks:
       - stock-network
+
+  sentiment-worker:
+    container_name: sentiment-worker
+    build:
+      context: .
+      dockerfile: Dockerfile.sentiment
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface
+    volumes:
+      - ./log:/var/log/stockraw/
+      - sentiment-model-cache:/app/.cache/huggingface
+    networks:
+      - stock-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+volumes:
+  sentiment-model-cache:
 
 networks:
   stock-network:

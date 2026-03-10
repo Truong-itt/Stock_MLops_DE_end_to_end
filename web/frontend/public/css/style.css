@@ -265,8 +265,8 @@ thead .sticky-col{background:var(--bg-2);z-index:6}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* Flash on update — cell-level */
-td.flash-up{animation:flashG .7s ease-out}
-td.flash-down{animation:flashR .7s ease-out}
+td.flash-up{animation:flashG 1.5s ease-out}
+td.flash-down{animation:flashR 1.5s ease-out}
 @keyframes flashG{0%{background:var(--green-bg)}100%{background:transparent}}
 @keyframes flashR{0%{background:var(--red-bg)}100%{background:transparent}}
 
@@ -485,6 +485,49 @@ td.flash-down{animation:flashR .7s ease-out}
   grid-column:1 / -1;
 }
 @media(max-width:960px){.overview-grid{grid-template-columns:1fr}.ov-tops{grid-column:auto}.ov-volume-chart{grid-column:auto}}
+
+/* Global overview market filter bar */
+.ov-global-filter{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 0 14px;
+}
+.ov-gf-label{
+  font-size:.82rem;font-weight:600;color:var(--text-1);margin-right:4px;
+}
+.ov-global-filter .ov-mf-btn{
+  font-size:.8rem;padding:5px 16px;
+  border-radius:var(--radius-sm);
+}
+
+/* Overview filter button base */
+.ov-mf-btn{
+  background:none;border:1px solid var(--border);color:var(--text-2);
+  font-size:.72rem;font-weight:500;padding:3px 10px;
+  border-radius:4px;cursor:pointer;white-space:nowrap;
+  transition:all var(--transition);
+}
+.ov-mf-btn:hover{color:var(--text-0);border-color:var(--text-3)}
+.ov-mf-btn.active{
+  background:var(--accent);color:#fff;border-color:var(--accent);
+  box-shadow:0 1px 4px rgba(99,102,241,.3);
+}
+
+/* Sentiment legend explanation */
+.ov-sentiment-legend{
+  padding:8px 18px 12px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.ov-sent-label{
+  font-size:.74rem;color:var(--text-2);display:flex;align-items:center;gap:6px;
+}
+.ov-sent-dot{
+  display:inline-block;width:10px;height:10px;border-radius:50%;flex-shrink:0;
+}
+.ov-sent-label strong{color:var(--text-1)}
+
+.ov-panel-header .ov-panel-total{
+  margin-left:auto;
+}
 
 .ov-panel{
   background:var(--bg-1);

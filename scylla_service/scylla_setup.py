@@ -174,6 +174,8 @@ class ScyllaDBSetup:
                 is_pdf boolean,
                 content text,
                 sentiment_score float,
+                sentiment_label text,
+                sentiment_updated_at timestamp,
                 pdf_link text,
                 crawled_at timestamp,
                 PRIMARY KEY (stock_code, date, article_id)

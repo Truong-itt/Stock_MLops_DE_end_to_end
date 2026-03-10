@@ -615,3 +615,123 @@ async def health_check():
         return {"status": "ok", "database": "connected"}
     except Exception as e:
         return {"status": "error", "database": "disconnected", "detail": str(e)}
+
+
+# ────────────────────────────── Sentiment Reprocess ──────────────────
+@router.post("/sentiment/reprocess")
+async def reprocess_sentiment(
+    stock_code: Optional[str] = Query(default=None, description="Stock code to reprocess (optional, all if not provided)"),
+    limit: int = Query(default=1000, le=10000, description="Max number of articles to reprocess"),
+):
+    """
+    Trigger re-processing sentiment for existing news articles.
+    Publishes articles to Kafka topic 'news-sentiment' for FinBERT analysis.
+    """
+    import json
+    try:
+        from confluent_kafka import Producer
+    except ImportError:
+        raise HTTPException(500, detail="Kafka not available")
+    
+    try:
+        # Create Kafka producer
+        producer = Producer({
+            "bootstrap.servers": "kafka-1:29092,kafka-2:29092,kafka-3:29092",
+            "acks": "all",
+        })
+        
+        # Query news from database
+        if stock_code:
+            rows = list(db.execute(
+                "SELECT * FROM stock_news WHERE stock_code = %s",
+                [stock_code.upper()]
+            ))
+        else:
+            # Get all distinct stock codes first
+            codes = list(db.execute("SELECT DISTINCT stock_code FROM stock_news"))
+            rows = []
+            for code_row in codes[:50]:  # Limit to 50 symbols
+                code = code_row.get("stock_code")
+                if code:
+                    code_rows = list(db.execute(
+                        "SELECT * FROM stock_news WHERE stock_code = %s",
+                        [code]
+                    ))
+                    rows.extend(code_rows)
+                if len(rows) >= limit:
+                    break
+        
+        rows = rows[:limit]
+        published = 0
+        
+        for row in rows:
+            try:
+                # Prepare message
+                data = {
+                    "stock_code": row.get("stock_code"),
+                    "article_id": row.get("article_id"),
+                    "title": row.get("title", ""),
+                    "content": row.get("content", ""),
+                    "link": row.get("link", ""),
+                    "date": row.get("date").isoformat() if row.get("date") else None,
+                }
+                
+                producer.produce(
+                    "news-sentiment",
+                    key=data["article_id"].encode("utf-8") if data["article_id"] else None,
+                    value=json.dumps(data).encode("utf-8"),
+                )
+                published += 1
+                
+                if published % 100 == 0:
+                    producer.flush()
+            except Exception as e:
+                logger.warning(f"Failed to publish article: {e}")
+        
+        producer.flush()
+        
+        return ok({
+            "message": f"Published {published} articles to Kafka for reprocessing",
+            "total_found": len(rows),
+            "published": published,
+            "stock_code": stock_code or "all",
+        })
+    except Exception as e:
+        logger.error(f"reprocess_sentiment error: {e}")
+        raise HTTPException(500, detail=str(e))
+
+
+@router.get("/sentiment/status")
+async def get_sentiment_status():
+    """Get statistics about sentiment analysis status."""
+    try:
+        # Count articles with/without FinBERT sentiment
+        all_codes = list(db.execute("SELECT DISTINCT stock_code FROM stock_news"))
+        
+        total = 0
+        with_finbert = 0
+        without_finbert = 0
+        
+        for code_row in all_codes[:50]:
+            code = code_row.get("stock_code")
+            if code:
+                rows = list(db.execute(
+                    "SELECT sentiment_score, sentiment_label FROM stock_news WHERE stock_code = %s",
+                    [code]
+                ))
+                for r in rows:
+                    total += 1
+                    if r.get("sentiment_label"):
+                        with_finbert += 1
+                    else:
+                        without_finbert += 1
+        
+        return ok({
+            "total_articles": total,
+            "with_finbert_sentiment": with_finbert,
+            "without_finbert_sentiment": without_finbert,
+            "completion_percentage": round(with_finbert / total * 100, 2) if total > 0 else 0,
+        })
+    except Exception as e:
+        logger.error(f"get_sentiment_status error: {e}")
+        raise HTTPException(500, detail=str(e))

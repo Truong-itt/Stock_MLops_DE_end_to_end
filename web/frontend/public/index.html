@@ -10,7 +10,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/css/style.css?v=20260310e" />
+  <link rel="stylesheet" href="/css/style.css?v=20260310h" />
   <script>
     /* ── Theme: runs before paint to avoid FOUC ── */
     (function(){
@@ -42,7 +42,8 @@
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
       </svg>
-      <span>StockVN <small>Dashboard</small></span>
+      <!-- <span>HamoniStockVN <small>Dashboard</small></span> -->
+      <span>HamoniStock</span>
     </div>
   </div>
 
@@ -88,8 +89,8 @@
   <nav class="tabs" id="tabs">
     <button class="tab active" data-tab="market">Bảng giá</button>
     <button class="tab" data-tab="overview">Thị trường</button>
-    <button class="tab" data-tab="news">Tin tức</button>
     <button class="tab" data-tab="watchlist">Quan tâm</button>
+    <button class="tab" data-tab="news">Tin tức</button>
     <div class="tabs-spacer"></div>
     <div class="market-filter" id="marketFilterGroup">
       <button class="mf-btn active" data-market="">Tất cả</button>
@@ -141,7 +142,7 @@
             <th>KL</th>
             <th>VWAP</th>
             <th>Ngày</th>
-            <th class="fav-col" title="Quan tâm">★</th>
+            <th class="fav-col" title="Quan tâm">Quan tâm</th>
           </tr>
         </thead>
         <tbody id="stockBody">
@@ -153,6 +154,13 @@
 
   <!-- ── Tab: Market Overview ──────────────────────────────── -->
   <section class="tab-content" id="tab-overview">
+    <!-- Global market filter for entire overview tab -->
+    <div class="ov-global-filter" id="ovGlobalFilter">
+      <!-- <span class="ov-gf-label">Thị trường:</span> -->
+      <button class="ov-mf-btn active" data-ovmarket="">Tất cả</button>
+      <button class="ov-mf-btn" data-ovmarket="vn">Việt Nam</button>
+      <button class="ov-mf-btn" data-ovmarket="world">Thế giới</button>
+    </div>
     <div class="overview-grid">
 
       <!-- Chỉ số A-D (Market Breadth) -->
@@ -176,10 +184,14 @@
       <div class="ov-panel ov-sentiment">
         <div class="ov-panel-header">
           <h3>Phân tích Sentiment</h3>
-          <span class="ov-panel-sub">Tin tức gần nhất</span>
         </div>
         <div class="ov-chart-wrap" style="height:200px">
           <canvas id="sentimentChart"></canvas>
+        </div>
+        <div class="ov-sentiment-legend">
+          <div class="ov-sent-label"><span class="ov-sent-dot" style="background:#10b981"></span> <strong>Tin tốt, tăng trưởng, lạc quan</strong></div>
+          <div class="ov-sent-label"><span class="ov-sent-dot" style="background:#ef4444"></span> <strong>Tin xấu, giảm sút, rủi ro</strong></div>
+          <div class="ov-sent-label"><span class="ov-sent-dot" style="background:#6b7280"></span> <strong>Tin thông thường</strong></div>
         </div>
         <div class="ov-sentiment-stocks" id="ovSentimentStocks"></div>
       </div>
@@ -189,7 +201,7 @@
         <div class="ov-tops-tabs">
           <button class="ov-top-tab active" data-top="gainers">Top tăng</button>
           <button class="ov-top-tab" data-top="losers">Top giảm</button>
-          <button class="ov-top-tab" data-top="volume">KL cao nhất</button>
+          <button class="ov-top-tab" data-top="volume">Khối lượng cao nhất</button>
         </div>
         <div class="ov-top-content" id="ovTopContent">
           <p class="muted">Đang tải …</p>
@@ -199,8 +211,7 @@
       <!-- Top 10 Khối lượng giao dịch -->
       <div class="ov-panel ov-volume-chart">
         <div class="ov-panel-header">
-          <h3>Top 10 KL Giao Dịch</h3>
-          <span class="ov-panel-sub">Mã có khối lượng giao dịch nhiều nhất</span>
+          <h3>Top 10 khối lượng Giao Dịch</h3>
         </div>
         <div class="ov-chart-wrap" style="height:380px">
           <canvas id="volumeTop10Chart"></canvas>
@@ -234,7 +245,7 @@
   <!-- ── Tab: Watchlist ────────────────────────────────────── -->
   <section class="tab-content" id="tab-watchlist">
     <div class="watchlist-header">
-      <h2>★ Danh sách quan tâm</h2>
+      <h2>Danh sách quan tâm</h2>
       <span class="wl-info" id="wlInfo">0 mã</span>
     </div>
     <div class="watchlist-content" id="watchlistContent">
@@ -244,13 +255,15 @@
     <!-- Price Chart Section -->
     <div class="wl-chart-section" id="wlChartSection" style="display:none">
       <div class="wl-chart-header">
-        <h3>📈 Biểu đồ giá các mã quan tâm</h3>
+        <h3>Biểu đồ giá các mã quan tâm</h3>
         <select id="wlChartInterval" class="wl-chart-interval">
           <option value="1m">1 phút</option>
           <option value="5m">5 phút</option>
           <option value="1h" selected>1 giờ</option>
-          <option value="1d">1 ngày</option>
-          <option value="1w">1 tuần</option>
+          <option value="3h">3 giờ</option>
+          <option value="6h">6 giờ</option>
+          <option value="15d">15 ngày</option>
+          <option value="1mo">1 tháng</option>
         </select>
       </div>
       <div class="wl-chart-wrap"><canvas id="wlPriceChart"></canvas></div>
@@ -260,7 +273,7 @@
     <!-- News Section -->
     <div class="watchlist-news-section" id="wlNewsSection" style="display:none">
       <div class="wl-news-header">
-        <h3>📰 Tin tức các mã quan tâm</h3>
+        <h3>Tin tức các mã quan tâm</h3>
         <div class="wl-news-filters">
           <select id="wlNewsFilter" class="wl-news-filter">
             <option value="all">Tất cả mã</option>
@@ -314,7 +327,7 @@
     <div class="matched-orders-section">
       <div class="mo-header">
         <h3>Matched Orders</h3>
-        <span class="mo-subtitle">Update realtime</span>
+        <!-- <span class="mo-subtitle">Update realtime</span> -->
       </div>
       <div class="mo-table-wrap">
         <table class="mo-table" id="moTable">
@@ -402,6 +415,6 @@
 <!-- ═══ SCRIPTS ══════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="/js/app.js?v=20260310g"></script>
+<script src="/js/app.js?v=20260310n"></script>
 </body>
 </html>

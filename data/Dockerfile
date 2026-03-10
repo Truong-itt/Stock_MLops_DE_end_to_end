@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir \
 COPY stream_data.py .
 COPY agg_worker.py .
 COPY news_worker.py .
+COPY sentiment_worker.py .
+COPY reprocess_sentiment.py .
 COPY logger.py .
 # COPY utils.py .
 

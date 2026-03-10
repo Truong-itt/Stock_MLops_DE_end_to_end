@@ -780,6 +780,40 @@ let _ovData = null; // cached overview data
 let sentimentChart = null; // sentiment chart instance
 let _sentData = null; // cached sentiment data
 
+// Single global market filter for overview tab (''=all, 'vn', 'world')
+let _ovMarket = '';
+
+function _ovMatchesMarket(sym){
+  if(!_ovMarket) return true;
+  if(_ovMarket==='vn') return VN_STOCKS.has(sym);
+  if(_ovMarket==='world') return WORLD_STOCKS.has(sym);
+  return true;
+}
+
+function _refreshAllOverview(){
+  if(_ovData){
+    renderBreadthChart(_ovData.breadth);
+    renderTopTable();
+    renderVolumeTop10Chart();
+  }
+  if(_sentData) renderSentimentChart(_sentData);
+}
+
+// Wire up single global overview market filter
+function _initOvMarketFilters(){
+  document.getElementById('ovGlobalFilter')?.querySelectorAll('.ov-mf-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.getElementById('ovGlobalFilter').querySelectorAll('.ov-mf-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      _ovMarket = btn.dataset.ovmarket;
+      _refreshAllOverview();
+    });
+  });
+}
+
+// Initialize filter on DOMContentLoaded
+document.addEventListener('DOMContentLoaded',()=>_initOvMarketFilters());
+
 async function loadMarketOverview(){
   try{
     const [rOv, rSent] = await Promise.all([
@@ -808,11 +842,41 @@ function renderBreadthChart(b){
   if(!canvas) return;
   if(breadthChart){breadthChart.destroy();breadthChart=null;}
 
-  const labels = b.labels;  // e.g. ['<-7%','-7~-5%',...,'>7%']
-  const values = b.values;
-  const total  = b.total;
-  const advance= b.advancers;
-  const decline= b.decliners;
+  // If market filter is active, recompute breadth from filtered stocks
+  let labels = b.labels;
+  let values = b.values;
+  let total = b.total;
+  let advance = b.advancers;
+  let decline = b.decliners;
+
+  if(_ovMarket && _ovData && _ovData.stocks){
+    const fStocks = _ovData.stocks.filter(s=>_ovMatchesMarket(s.symbol));
+    // Recompute breadth buckets
+    const buckets = [0,0,0,0,0,0,0,0,0,0,0]; // 11 buckets matching _bucketRange
+    let adv=0, dec=0;
+    fStocks.forEach(s=>{
+      const p = s.pct||0;
+      let idx;
+      if(p<-7) idx=0;
+      else if(p<-5) idx=1;
+      else if(p<-3) idx=2;
+      else if(p<-1) idx=3;
+      else if(p<0) idx=4;
+      else if(p===0) idx=5;
+      else if(p<1) idx=6;
+      else if(p<3) idx=7;
+      else if(p<5) idx=8;
+      else if(p<7) idx=9;
+      else idx=10;
+      buckets[idx]++;
+      if(p>0) adv++;
+      else if(p<0) dec++;
+    });
+    values = buckets;
+    total = fStocks.length;
+    advance = adv;
+    decline = dec;
+  }
 
   // Color each bar: red for negative buckets, yellow for 0%, green for positive
   const colors = labels.map(l=>{
@@ -886,6 +950,7 @@ function showBreadthStocks(bucketIdx, label){
 
   const [lo, hi] = _bucketRange(bucketIdx);
   const matched = _ovData.stocks.filter(s=>{
+    if(!_ovMatchesMarket(s.symbol)) return false;
     const p = s.pct || 0;
     if(bucketIdx===5) return p===0; // exact 0
     if(bucketIdx===0) return p < -7; // < -7%
@@ -925,7 +990,17 @@ function renderSentimentChart(data){
   if(!canvas || !data) return;
   if(sentimentChart){sentimentChart.destroy();sentimentChart=null;}
 
-  const {positive, negative, neutral} = data.summary;
+  // Recompute summary if market filter is active
+  let {positive, negative, neutral} = data.summary;
+  if(_ovMarket && data.stocks){
+    positive=0; negative=0; neutral=0;
+    data.stocks.forEach(s=>{
+      if(!_ovMatchesMarket(s.symbol)) return;
+      positive += s.positive||0;
+      negative += s.negative||0;
+      neutral  += s.neutral||0;
+    });
+  }
 
   sentimentChart = new Chart(canvas, {
     type:'doughnut',
@@ -950,10 +1025,7 @@ function renderSentimentChart(data){
         }
       },
       plugins:{
-        legend:{
-          position:'right',
-          labels:{color:'var(--text-1,#c3c8d8)',font:{size:12},padding:14,usePointStyle:true,pointStyleWidth:10}
-        },
+        legend:{display:false},
         tooltip:{
           backgroundColor:'#161b26',titleColor:'#f0f2f8',bodyColor:'#c3c8d8',
           borderColor:'#1f2739',borderWidth:1,
@@ -976,14 +1048,15 @@ function showSentimentStocks(mode){
 
   let filtered;
   let title;
+  const mktFilter = s => _ovMatchesMarket(s.symbol);
   if(mode==='positive'){
-    filtered = _sentData.stocks.filter(s=>s.positive>0).sort((a,b)=>b.avg_score-a.avg_score);
+    filtered = _sentData.stocks.filter(s=>s.positive>0 && mktFilter(s)).sort((a,b)=>b.avg_score-a.avg_score);
     title = `Mã có tin tích cực (${filtered.length})`;
   } else if(mode==='negative'){
-    filtered = _sentData.stocks.filter(s=>s.negative>0).sort((a,b)=>a.avg_score-b.avg_score);
+    filtered = _sentData.stocks.filter(s=>s.negative>0 && mktFilter(s)).sort((a,b)=>a.avg_score-b.avg_score);
     title = `Mã có tin tiêu cực (${filtered.length})`;
   } else {
-    filtered = _sentData.stocks.filter(s=>s.neutral>0).sort((a,b)=>b.neutral-a.neutral);
+    filtered = _sentData.stocks.filter(s=>s.neutral>0 && mktFilter(s)).sort((a,b)=>b.neutral-a.neutral);
     title = `Mã có tin trung lập (${filtered.length})`;
   }
 
@@ -999,11 +1072,12 @@ function showSentimentStocks(mode){
     <button class="obs-close" onclick="closeSentimentStocks()">&times;</button>
   </div>
   <div class="obs-chips">${filtered.map(s=>{
+    // Use the selected sentiment mode color, not avg_score
+    const modeColor = mode==='positive'?'up':mode==='negative'?'down':'flat';
     const sc = s.avg_score;
-    const c = sc>0?'up':sc<0?'down':'flat';
     return `<div class="obs-chip" onclick="showSentimentNews('${s.symbol}')">
       <span class="obs-sym">${s.symbol}</span>
-      <span class="obs-pct ${c}">${sc>=0?'+':''}${sc.toFixed(3)}</span>
+      <span class="obs-pct ${modeColor}">${sc>=0?'+':''}${sc.toFixed(3)}</span>
       <span style="font-size:.65rem;color:var(--text-3)">${s.total} tin</span>
     </div>`;
   }).join('')}</div>
@@ -1048,7 +1122,8 @@ function renderVolumeTop10Chart(){
   if(!canvas || !_ovData) return;
   if(volumeTop10Chart){volumeTop10Chart.destroy();volumeTop10Chart=null;}
 
-  const top10 = [..._ovData.stocks].sort((a,b)=>(b.volume||0)-(a.volume||0)).slice(0,10).reverse();
+  const filteredStocks = _ovData.stocks.filter(s=>_ovMatchesMarket(s.symbol));
+  const top10 = [...filteredStocks].sort((a,b)=>(b.volume||0)-(a.volume||0)).slice(0,10).reverse();
   const labels = top10.map(s=>s.symbol);
   const volumes = top10.map(s=>s.volume||0);
   const colors = top10.map(s=>s.pct>=0?'rgba(16,185,129,.75)':'rgba(239,68,68,.75)');
@@ -1118,13 +1193,15 @@ function renderTopTable(){
   const container = document.getElementById('ovTopContent');
   if(!container || !_ovData) return;
 
+  const fStocks = _ovData.stocks.filter(s=>_ovMatchesMarket(s.symbol));
+
   let rows, sortField, ascending = false;
   if(currentTopTab==='gainers'){
-    rows = [..._ovData.stocks].filter(s=>(s.pct||0)>0).sort((a,b)=>(b.pct||0)-(a.pct||0));
+    rows = [...fStocks].filter(s=>(s.pct||0)>0).sort((a,b)=>(b.pct||0)-(a.pct||0));
   } else if(currentTopTab==='losers'){
-    rows = [..._ovData.stocks].filter(s=>(s.pct||0)<0).sort((a,b)=>(a.pct||0)-(b.pct||0));
+    rows = [...fStocks].filter(s=>(s.pct||0)<0).sort((a,b)=>(a.pct||0)-(b.pct||0));
   } else {
-    rows = [..._ovData.stocks].sort((a,b)=>(b.volume||0)-(a.volume||0));
+    rows = [...fStocks].sort((a,b)=>(b.volume||0)-(a.volume||0));
   }
 
   // Show top 15
@@ -1236,21 +1313,33 @@ async function loadWatchlistChart(symbols){
   
   // Fetch price data for each symbol
   const datasets = [];
-  const labels = new Set();
+  let allLabels = [];
   
   for(let i=0; i<symbols.length && i<10; i++){
     const sym = symbols[i];
     try{
-      const resp = await fetch(`${API}/api/stock/${sym}/prices?interval=${interval}&limit=50`);
+      const resp = await fetch(`${API}/api/stocks/ohlcv/${sym}?interval=${interval}`);
       const data = await resp.json();
       if(data.status==='ok' && data.data?.length){
+        // Sort by timestamp ascending
+        const sorted = [...data.data].sort((a,b)=> new Date(a.bucket_ts||a.trade_date) - new Date(b.bucket_ts||b.trade_date));
+        
         // Normalize prices to percentage change from first value
-        const firstPrice = data.data[0].close || data.data[0].price;
-        const normalized = data.data.map(d => ({
-          time: new Date(d.ts || d.timestamp).toLocaleTimeString('vi',{hour:'2-digit',minute:'2-digit'}),
-          value: firstPrice ? ((d.close || d.price) - firstPrice) / firstPrice * 100 : 0
-        }));
-        normalized.forEach(d => labels.add(d.time));
+        const firstPrice = sorted[0].close || sorted[0].price;
+        const normalized = sorted.map(d => {
+          const ts = new Date(d.bucket_ts || d.trade_date);
+          return {
+            time: ts.toLocaleTimeString('vi',{hour:'2-digit',minute:'2-digit'}),
+            rawTime: ts.getTime(),
+            value: firstPrice ? ((d.close || d.price) - firstPrice) / firstPrice * 100 : 0
+          };
+        });
+        
+        // Keep all labels for alignment
+        if(normalized.length > allLabels.length){
+          allLabels = normalized.map(d => d.time);
+        }
+        
         datasets.push({
           label: sym,
           data: normalized.map(d => d.value),
@@ -1279,7 +1368,7 @@ async function loadWatchlistChart(symbols){
   wlPriceChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: [...labels],
+      labels: allLabels,
       datasets
     },
     options: {
@@ -1455,7 +1544,11 @@ function openNewsModal(newsItem){
   const sc = newsItem.sentiment_score||0;
   const sCls = sc>0?"sent-pos":sc<0?"sent-neg":"sent-neu";
   const sLabel = sc>0?"Tích cực":sc<0?"Tiêu cực":"Trung lập";
-  nmMeta.innerHTML = `<span>${fmtDT(newsItem.date)}</span><span class="${sCls}">${sLabel} (${sc.toFixed(2)})</span>`;
+  
+  // Add source info to meta
+  const source = getNewsSource(newsItem.link);
+  const srcLabel = source.type === 'yahoo' ? '📰 Yahoo Finance' : source.type === 'google' ? '🔍 Google News' : '🌐 ' + source.name;
+  nmMeta.innerHTML = `<span>${fmtDT(newsItem.date)}</span><span class="${sCls}">${sLabel} (${sc.toFixed(2)})</span><span style="margin-left:auto;font-size:.75rem;color:var(--text-2)">${srcLabel}</span>`;
   
   nmContent.innerHTML = newsItem.content || '<p class="muted">Không có nội dung chi tiết</p>';
   nmLink.href = newsItem.link || '#';
