@@ -1,5 +1,14 @@
 # 📈 Stock MLOps & Data Engineering — End-to-End
 
+![Python](https://img.shields.io/badge/Python-3.10%2F3.11-blue?logo=python)
+![Kafka](https://img.shields.io/badge/Apache%20Kafka-KRaft%207.6.0-black?logo=apachekafka)
+![Flink](https://img.shields.io/badge/Apache%20Flink-1.18-orange?logo=apacheflink)
+![ClickHouse](https://img.shields.io/badge/ClickHouse-24.3-yellow?logo=clickhouse)
+![ScyllaDB](https://img.shields.io/badge/ScyllaDB-5.4-purple)
+![FinBERT](https://img.shields.io/badge/AI-FinBERT%20Sentiment-green?logo=huggingface)
+![Docker](https://img.shields.io/badge/Docker-Compose%20v2-blue?logo=docker)
+![Status](https://img.shields.io/badge/status-active%20development-brightgreen)
+
 Hệ thống xử lý dữ liệu chứng khoán **real-time** end-to-end, kết hợp Data Engineering và MLOps.
 Pipeline hiện tại: thu thập giá cổ phiếu từ Yahoo Finance WebSocket → Kafka → Flink → ClickHouse / ScyllaDB, phân tích sentiment tin tức bằng FinBERT, hiển thị qua dashboard web thời gian thực.
 **Sắp ra mắt:** dự đoán giá chứng khoán dựa trên timeseries + tin tức, với ClickHouse đóng vai trò **Data Warehouse trung tâm** cho toàn bộ pipeline MLOps.
