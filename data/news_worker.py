@@ -35,11 +35,13 @@ POLL_INTERVAL_SEC = 300     # 5 phút
 VIETNAM_STOCKS = [
     "VCB", "BID", "FPT", "HPG", "CTG", "VHM", "TCB", "VPB", "VNM", "MBB",
     "GAS", "ACB", "MSN", "GVR", "LPB", "SSB", "STB", "VIB", "MWG", "HDB",
+    "PLX", "POW", "SAB", "BCM", "PDR", "KDH", "NVL", "DGC", "SHB", "EIB",
 ]
 
 INTERNATIONAL_STOCKS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "AVGO",
     "JPM", "V", "UNH", "WMT", "MA", "XOM", "JNJ", "PG", "HD", "COST",
+    "NFLX", "AMD", "INTC", "DIS", "PYPL", "BA", "CRM", "ORCL", "CSCO", "ABT",
 ]
 
 ALL_STOCKS = VIETNAM_STOCKS + INTERNATIONAL_STOCKS
@@ -272,9 +274,16 @@ def main():
             # Thử Yahoo Finance RSS trước
             articles = fetch_yahoo_rss(symbol)
 
-            # Fallback Google News nếu Yahoo không có kết quả
-            if not articles:
-                articles = fetch_google_news(symbol)
+            # Bổ sung Google News nếu chưa đủ 5 tin
+            if len(articles) < 5:
+                google_articles = fetch_google_news(symbol)
+                # Loại bỏ trùng lặp bằng article_id
+                existing_ids = {a["article_id"] for a in articles}
+                for ga in google_articles:
+                    if ga["article_id"] not in existing_ids:
+                        articles.append(ga)
+                        if len(articles) >= 5:
+                            break
 
             if articles:
                 n = save_articles(scylla_session, articles)

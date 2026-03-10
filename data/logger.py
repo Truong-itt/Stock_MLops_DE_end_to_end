@@ -63,6 +63,12 @@ def get_logger(
     handler.setFormatter(formatter)
 
     logger.addHandler(handler)
+    
+    # Also log to stdout for Docker
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
     logger.propagate = False
 
     return logger

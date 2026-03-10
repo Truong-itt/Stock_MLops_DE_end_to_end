@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List, Set
@@ -86,10 +86,18 @@ def _fetch_merged_data() -> tuple[List[dict], str]:
         "FROM stock_daily_summary"
     ))
 
-    # Build daily lookup
+    # Build daily lookup — keep only the LATEST trade_date per symbol
     daily_map: Dict[str, dict] = {}
     for r in daily_rows:
-        daily_map[r["symbol"]] = r
+        sym = r["symbol"]
+        if sym not in daily_map:
+            daily_map[sym] = r
+        else:
+            # Keep the row with the more recent trade_date
+            existing_date = daily_map[sym].get("trade_date")
+            new_date = r.get("trade_date")
+            if new_date and existing_date and str(new_date) > str(existing_date):
+                daily_map[sym] = r
 
     if not latest_rows:
         # No real-time data at all → pure daily
@@ -102,6 +110,17 @@ def _fetch_merged_data() -> tuple[List[dict], str]:
         sym = r["symbol"]
         seen.add(sym)
         if r.get("price") is not None:
+            # Merge daily OHLC data (open, high, low, vwap, volume) into latest row
+            daily = daily_map.get(sym)
+            if daily:
+                r["open"] = daily.get("open")
+                r["high"] = daily.get("high")
+                r["low"] = daily.get("low")
+                r["vwap"] = daily.get("vwap")
+                # Fill volume from daily when day_volume is null
+                if not r.get("day_volume"):
+                    r["day_volume"] = daily.get("volume")
+                r["trade_date"] = daily.get("trade_date")
             merged.append(r)
         else:
             # price is null → try to get from daily
@@ -170,11 +189,56 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif rtype == "get_ohlcv":
                         symbol = req.get("symbol", "").upper()
                         interval = req.get("interval", "1m")
-                        target_date = req.get("date", str(date.today()))
-                        rows = list(db.execute(
-                            "SELECT * FROM stock_prices_agg WHERE symbol=%s AND bucket_date=%s AND interval=%s",
-                            [symbol, target_date, interval],
-                        ))
+                        req_date = req.get("date")
+                        from datetime import timedelta
+                        rows = []
+                        
+                        # Map interval → query strategy
+                        DAILY_INTERVALS = {
+                            "15d": 15,
+                            "1mo": 30,
+                            "6mo": 180,
+                            "1y": 365,
+                        }
+                        if interval in DAILY_INTERVALS:
+                            # Query daily data
+                            rows = list(db.execute(
+                                "SELECT * FROM stock_daily_summary WHERE symbol = %s LIMIT %s",
+                                [symbol, DAILY_INTERVALS[interval]],
+                            ))
+                            # Chuyển format: trade_date → bucket/ts
+                            formatted = []
+                            for r in rows:
+                                formatted.append({
+                                    "symbol": r["symbol"],
+                                    "ts": r["trade_date"],
+                                    "bucket": r["trade_date"],
+                                    "open": r["open"],
+                                    "high": r["high"],
+                                    "low": r["low"],
+                                    "close": r["close"],
+                                    "volume": r["volume"],
+                                    "vwap": r.get("vwap"),
+                                    "change_percent": r.get("change_percent"),
+                                })
+                            rows = formatted
+                        else:
+                            # Intraday: 1m, 5m, 1h, 3h, 6h
+                            if req_date:
+                                rows = list(db.execute(
+                                    "SELECT * FROM stock_prices_agg WHERE symbol=%s AND bucket_date=%s AND interval=%s",
+                                    [symbol, req_date, interval],
+                                ))
+                            else:
+                                for offset in range(6):
+                                    d = date.today() - timedelta(days=offset)
+                                    rows = list(db.execute(
+                                        "SELECT * FROM stock_prices_agg WHERE symbol=%s AND bucket_date=%s AND interval=%s",
+                                        [symbol, str(d), interval],
+                                    ))
+                                    if rows:
+                                        break
+                        
                         await websocket.send_text(json.dumps({
                             "type": "ohlcv_data",
                             "symbol": symbol,
@@ -184,8 +248,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif rtype == "get_news":
                         code = req.get("stock_code", "").upper()
                         rows = list(db.execute(
-                            "SELECT * FROM stock_news WHERE stock_code=%s LIMIT 20", [code]
+                            "SELECT * FROM stock_news WHERE stock_code=%s LIMIT 50", [code]
                         ))
+                        cutoff = datetime.utcnow() - timedelta(days=7)
+                        rows = [r for r in rows if r.get("date") and r["date"] >= cutoff]
+                        rows.sort(key=lambda x: x.get("date") or datetime.min, reverse=True)
+                        rows = rows[:20]
                         await websocket.send_text(json.dumps({
                             "type": "news_data",
                             "stock_code": code,
@@ -201,6 +269,26 @@ async def websocket_endpoint(websocket: WebSocket):
                             "type": "daily_data",
                             "symbol": symbol,
                             "data": rows,
+                        }, cls=CustomEncoder))
+
+                    elif rtype == "get_matched_orders":
+                        symbol = req.get("symbol", "").upper()
+                        limit = min(int(req.get("limit", 50)), 200)
+                        rows = list(db.execute(
+                            "SELECT timestamp, price, last_size, change, change_percent "
+                            "FROM stock_prices WHERE symbol=%s LIMIT %s",
+                            [symbol, limit],
+                        ))
+                        count_rows = list(db.execute(
+                            "SELECT COUNT(*) as cnt FROM stock_prices WHERE symbol=%s",
+                            [symbol],
+                        ))
+                        total = count_rows[0]["cnt"] if count_rows else len(rows)
+                        await websocket.send_text(json.dumps({
+                            "type": "matched_orders",
+                            "symbol": symbol,
+                            "data": rows,
+                            "total_count": total,
                         }, cls=CustomEncoder))
 
                 except json.JSONDecodeError:

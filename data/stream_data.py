@@ -29,20 +29,20 @@ from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroSerializer
 
 
-# ═══════════════════════════════════════════════════════════════════════
 # CONFIG
-# ═══════════════════════════════════════════════════════════════════════
 BOOTSTRAP_SERVERS = "kafka-1:29092"
 SCHEMA_REGISTRY_URL = "http://schema-registry:8081"
 
 VIETNAM_STOCKS = [
     "VCB", "BID", "FPT", "HPG", "CTG", "VHM", "TCB", "VPB", "VNM", "MBB",
     "GAS", "ACB", "MSN", "GVR", "LPB", "SSB", "STB", "VIB", "MWG", "HDB",
+    "PLX", "POW", "SAB", "BCM", "PDR", "KDH", "NVL", "DGC", "SHB", "EIB",
 ]
 
 INTERNATIONAL_STOCKS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "AVGO",
     "JPM", "V", "UNH", "WMT", "MA", "XOM", "JNJ", "PG", "HD", "COST",
+    "NFLX", "AMD", "INTC", "DIS", "PYPL", "BA", "CRM", "ORCL", "CSCO", "ABT",
 ]
 
 ALL_STOCKS = VIETNAM_STOCKS + INTERNATIONAL_STOCKS
@@ -70,9 +70,7 @@ AVRO_SCHEMA_STR = """
 """
 
 
-# ═══════════════════════════════════════════════════════════════════════
 # HELPERS
-# ═══════════════════════════════════════════════════════════════════════
 def ensure_ms(v: Any) -> Optional[int]:
     """Chuẩn hóa timestamp về milliseconds."""
     if v is None:
@@ -121,15 +119,13 @@ def to_avro_record(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def resolve_topic_and_partition(stock_id: str):
     """Xác định topic và partition dựa vào mã cổ phiếu."""
     if stock_id in VIETNAM_STOCKS:
-        return "stock_price_vn", VIETNAM_STOCKS.index(stock_id) % 20
+        return "stock_price_vn", VIETNAM_STOCKS.index(stock_id) % 30
     elif stock_id in INTERNATIONAL_STOCKS:
-        return "stock_price_dif", INTERNATIONAL_STOCKS.index(stock_id) % 20
+        return "stock_price_dif", INTERNATIONAL_STOCKS.index(stock_id) % 30
     return None, None
 
 
-# ═══════════════════════════════════════════════════════════════════════
 # KAFKA PRODUCER
-# ═══════════════════════════════════════════════════════════════════════
 def create_producer(bootstrap: str, schema_registry_url: str) -> SerializingProducer:
     sr = SchemaRegistryClient({"url": schema_registry_url})
     avro_serializer = AvroSerializer(sr, AVRO_SCHEMA_STR)
@@ -144,9 +140,7 @@ def create_producer(bootstrap: str, schema_registry_url: str) -> SerializingProd
     })
 
 
-# ═══════════════════════════════════════════════════════════════════════
 # MAIN — WebSocket → Kafka
-# ═══════════════════════════════════════════════════════════════════════
 async def run(bootstrap: str, schema_registry_url: str):
     logger.info("Initializing Kafka Avro producer ...")
     producer = create_producer(bootstrap, schema_registry_url)

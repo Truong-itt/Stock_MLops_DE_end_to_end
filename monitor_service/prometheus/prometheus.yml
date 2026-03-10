@@ -28,3 +28,7 @@ scrape_configs:
         labels:
           job: node-exporter
           nodename: stock-monitoring-node
+
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse-exporter:9116']

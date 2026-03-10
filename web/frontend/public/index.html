@@ -7,7 +7,31 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 12 18 12 15 21 9 3 6 12 2 12'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="stylesheet" href="/css/style.css?v=20260310e" />
+  <script>
+    /* ── Theme: runs before paint to avoid FOUC ── */
+    (function(){
+      try {
+        var saved = localStorage.getItem('theme');
+        if(saved) document.documentElement.setAttribute('data-theme', saved);
+      } catch(e){}
+    })();
+    function toggleTheme(){
+      var html = document.documentElement;
+      var current = html.getAttribute('data-theme');
+      var next = (current === 'light') ? 'dark' : 'light';
+      html.setAttribute('data-theme', next);
+      try { localStorage.setItem('theme', next); } catch(e){}
+      /* re-render charts if they exist */
+      if(typeof chart !== 'undefined' && chart && typeof selected !== 'undefined' && selected && typeof loadOHLCV === 'function') loadOHLCV(selected);
+      if(typeof breadthChart !== 'undefined' && breadthChart && typeof _ovData !== 'undefined' && _ovData && typeof renderBreadthChart === 'function') renderBreadthChart(_ovData.breadth);
+      if(typeof sentimentChart !== 'undefined' && sentimentChart && typeof _sentData !== 'undefined' && _sentData && typeof renderSentimentChart === 'function') renderSentimentChart(_sentData);
+      if(typeof volumeTop10Chart !== 'undefined' && volumeTop10Chart && typeof _ovData !== 'undefined' && _ovData && typeof renderVolumeTop10Chart === 'function') renderVolumeTop10Chart();
+    }
+  </script>
 </head>
 <body>
 
@@ -31,6 +55,14 @@
   </div>
 
   <div class="header-right">
+    <button class="theme-toggle" id="themeToggle" title="Chuyển giao diện sáng/tối" onclick="toggleTheme()">
+      <div class="toggle-track">
+        <div class="toggle-thumb">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </div>
+      </div>
+    </button>
     <div class="conn-badge" id="connBadge">
       <span class="dot"></span>
       <span class="label">Đang kết nối</span>
@@ -45,17 +77,39 @@
   <!-- ── Stats Bar ─────────────────────────────────────────── -->
   <section class="stats-bar" id="statsBar">
     <div class="stat-card"><span class="stat-label">Tổng mã</span><span class="stat-val" id="sTotal">--</span></div>
-    <div class="stat-card up"><span class="stat-label">Tăng</span><span class="stat-val" id="sUp">--</span></div>
-    <div class="stat-card down"><span class="stat-label">Giảm</span><span class="stat-val" id="sDown">--</span></div>
-    <div class="stat-card"><span class="stat-label">Đứng</span><span class="stat-val" id="sFlat">--</span></div>
-    <div class="stat-card accent"><span class="stat-label">KL tổng</span><span class="stat-val" id="sVol">--</span></div>
+    <div class="stat-card up clickable" id="cardUp" title="Bấm để xem danh sách tăng"><span class="stat-label">Tăng</span><span class="stat-val" id="sUp">--</span></div>
+    <div class="stat-card down clickable" id="cardDown" title="Bấm để xem danh sách giảm"><span class="stat-label">Giảm</span><span class="stat-val" id="sDown">--</span></div>
+    <div class="stat-card clickable" id="cardFlat" title="Bấm để xem danh sách đứng giá"><span class="stat-label">Đứng</span><span class="stat-val" id="sFlat">--</span></div>
+    <div class="stat-card accent clickable" id="cardVol" title="Bấm để xem top khối lượng"><span class="stat-label">KL tổng</span><span class="stat-val" id="sVol">--</span></div>
     <div class="stat-card"><span class="stat-label">Cập nhật</span><span class="stat-val mono" id="sTime">--:--:--</span></div>
   </section>
 
   <!-- ── Navigation Tabs ───────────────────────────────────── -->
   <nav class="tabs" id="tabs">
     <button class="tab active" data-tab="market">Bảng giá</button>
+    <button class="tab" data-tab="overview">Thị trường</button>
     <button class="tab" data-tab="news">Tin tức</button>
+    <button class="tab" data-tab="watchlist">Quan tâm</button>
+    <div class="tabs-spacer"></div>
+    <div class="market-filter" id="marketFilterGroup">
+      <button class="mf-btn active" data-market="">Tất cả</button>
+      <button class="mf-btn" data-market="vn">Việt Nam</button>
+      <button class="mf-btn" data-market="world">Thế giới</button>
+    </div>
+    <select class="sector-filter" id="sectorFilter">
+      <option value="">All Sectors</option>
+      <option value="Technology">Technology</option>
+      <option value="Financial Services">Financial Services</option>
+      <option value="Consumer Cyclical">Consumer Cyclical</option>
+      <option value="Consumer Defensive">Consumer Defensive</option>
+      <option value="Communication Services">Communication Services</option>
+      <option value="Healthcare">Healthcare</option>
+      <option value="Energy">Energy</option>
+      <option value="Basic Materials">Basic Materials</option>
+      <option value="Real Estate">Real Estate</option>
+      <option value="Industrials">Industrials</option>
+      <option value="Utilities">Utilities</option>
+    </select>
   </nav>
 
   <!-- ── Tab: Market ───────────────────────────────────────── -->
@@ -77,6 +131,7 @@
         <thead>
           <tr>
             <th class="sticky-col">Mã</th>
+            <th>Tên công ty</th>
             <th>Giá</th>
             <th>Thay đổi</th>
             <th>%</th>
@@ -86,19 +141,133 @@
             <th>KL</th>
             <th>VWAP</th>
             <th>Ngày</th>
+            <th class="fav-col" title="Quan tâm">★</th>
           </tr>
         </thead>
         <tbody id="stockBody">
-          <tr><td colspan="10" class="empty-row"><div class="spinner"></div>Đang tải dữ liệu …</td></tr>
+          <tr><td colspan="12" class="empty-row"><div class="spinner"></div>Đang tải dữ liệu …</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
+  <!-- ── Tab: Market Overview ──────────────────────────────── -->
+  <section class="tab-content" id="tab-overview">
+    <div class="overview-grid">
+
+      <!-- Chỉ số A-D (Market Breadth) -->
+      <div class="ov-panel ov-breadth">
+        <div class="ov-panel-header">
+          <h3>Độ sâu thị trường</h3>
+          <span class="ov-panel-sub">Chỉ số A-D</span>
+          <span class="ov-panel-total" id="ovTotal">Tổng: --</span>
+        </div>
+        <div class="ov-chart-wrap">
+          <canvas id="breadthChart"></canvas>
+        </div>
+        <div class="ov-breadth-footer">
+          <span class="ov-decline" id="ovDecline">Giảm (Decliners): --</span>
+          <span class="ov-advance" id="ovAdvance">Tăng (Advancers): --</span>
+        </div>
+        <div class="ov-breadth-stocks" id="ovBreadthStocks"></div>
+      </div>
+
+      <!-- Sentiment Overview -->
+      <div class="ov-panel ov-sentiment">
+        <div class="ov-panel-header">
+          <h3>Phân tích Sentiment</h3>
+          <span class="ov-panel-sub">Tin tức gần nhất</span>
+        </div>
+        <div class="ov-chart-wrap" style="height:200px">
+          <canvas id="sentimentChart"></canvas>
+        </div>
+        <div class="ov-sentiment-stocks" id="ovSentimentStocks"></div>
+      </div>
+
+      <!-- Top Tăng / Top Giảm -->
+      <div class="ov-panel ov-tops">
+        <div class="ov-tops-tabs">
+          <button class="ov-top-tab active" data-top="gainers">Top tăng</button>
+          <button class="ov-top-tab" data-top="losers">Top giảm</button>
+          <button class="ov-top-tab" data-top="volume">KL cao nhất</button>
+        </div>
+        <div class="ov-top-content" id="ovTopContent">
+          <p class="muted">Đang tải …</p>
+        </div>
+      </div>
+
+      <!-- Top 10 Khối lượng giao dịch -->
+      <div class="ov-panel ov-volume-chart">
+        <div class="ov-panel-header">
+          <h3>Top 10 KL Giao Dịch</h3>
+          <span class="ov-panel-sub">Mã có khối lượng giao dịch nhiều nhất</span>
+        </div>
+        <div class="ov-chart-wrap" style="height:380px">
+          <canvas id="volumeTop10Chart"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
   <!-- ── Tab: News ─────────────────────────────────────────── -->
   <section class="tab-content" id="tab-news">
+    <div class="news-toolbar">
+      <div class="news-search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="newsSearchInput" placeholder="Tìm kiếm tin tức …" autocomplete="off" />
+      </div>
+      <div class="news-date-filters">
+        <label class="ndf-label">Từ</label>
+        <input type="date" id="newsDateFrom" class="ndf-input" />
+        <label class="ndf-label">Đến</label>
+        <input type="date" id="newsDateTo" class="ndf-input" />
+        <button class="ndf-btn" id="newsFilterBtn">Lọc</button>
+        <button class="ndf-btn ndf-clear" id="newsClearBtn">Xóa</button>
+      </div>
+    </div>
     <div class="news-grid" id="newsGrid">
       <p class="muted">Đang tải tin tức …</p>
+    </div>
+  </section>
+
+  <!-- ── Tab: Watchlist ────────────────────────────────────── -->
+  <section class="tab-content" id="tab-watchlist">
+    <div class="watchlist-header">
+      <h2>★ Danh sách quan tâm</h2>
+      <span class="wl-info" id="wlInfo">0 mã</span>
+    </div>
+    <div class="watchlist-content" id="watchlistContent">
+      <p class="muted">Chưa có mã nào trong danh sách quan tâm. Hãy bấm ☆ ở cột cuối bảng giá để thêm.</p>
+    </div>
+    
+    <!-- Price Chart Section -->
+    <div class="wl-chart-section" id="wlChartSection" style="display:none">
+      <div class="wl-chart-header">
+        <h3>📈 Biểu đồ giá các mã quan tâm</h3>
+        <select id="wlChartInterval" class="wl-chart-interval">
+          <option value="1m">1 phút</option>
+          <option value="5m">5 phút</option>
+          <option value="1h" selected>1 giờ</option>
+          <option value="1d">1 ngày</option>
+          <option value="1w">1 tuần</option>
+        </select>
+      </div>
+      <div class="wl-chart-wrap"><canvas id="wlPriceChart"></canvas></div>
+      <div class="wl-chart-legend" id="wlChartLegend"></div>
+    </div>
+    
+    <!-- News Section -->
+    <div class="watchlist-news-section" id="wlNewsSection" style="display:none">
+      <div class="wl-news-header">
+        <h3>📰 Tin tức các mã quan tâm</h3>
+        <div class="wl-news-filters">
+          <select id="wlNewsFilter" class="wl-news-filter">
+            <option value="all">Tất cả mã</option>
+          </select>
+        </div>
+      </div>
+      <div class="wl-news-grid" id="wlNewsGrid"></div>
     </div>
   </section>
 
@@ -107,9 +276,14 @@
 <!-- ═══ DETAIL DRAWER ════════════════════════════════════════ -->
 <aside class="drawer" id="drawer">
   <div class="drawer-header">
-    <h2 id="drSymbol">--</h2>
+    <div class="dr-header-info">
+      <h2 id="drSymbol">--</h2>
+      <span class="dr-company-name" id="drCompany"></span>
+    </div>
+    <button class="dr-fav-btn" id="drFavBtn" title="Thêm vào quan tâm">☆</button>
     <button class="btn-close" id="drawerClose">&times;</button>
   </div>
+  <div class="dr-description" id="drDescription"></div>
   <div class="drawer-body">
     <!-- Price hero -->
     <div class="price-hero">
@@ -123,16 +297,46 @@
       <div class="chart-bar">
         <span class="chart-title">Biểu đồ giá</span>
         <select id="drInterval">
-          <option value="1s">1s</option>
-          <option value="5s">5s</option>
-          <option value="1m" selected>1m</option>
-          <option value="5m">5m</option>
-          <option value="15m">15m</option>
-          <option value="1h">1h</option>
+          <option value="1m" selected>1 phút</option>
+          <option value="5m">5 phút</option>
+          <option value="1h">1 giờ</option>
+          <option value="3h">3 giờ</option>
+          <option value="6h">6 giờ</option>
+          <option value="15d">15 ngày</option>
+          <option value="1mo">1 tháng</option>
+          <option value="6mo">6 tháng</option>
+          <option value="1y">1 năm</option>
         </select>
       </div>
       <div class="chart-wrap"><canvas id="drChart"></canvas></div>
     </div>
+    <!-- Matched Orders -->
+    <div class="matched-orders-section">
+      <div class="mo-header">
+        <h3>Matched Orders</h3>
+        <span class="mo-subtitle">Update realtime</span>
+      </div>
+      <div class="mo-table-wrap">
+        <table class="mo-table" id="moTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Price</th>
+              <th>Last Size</th>
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody id="moBody">
+            <tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Đang tải …</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mo-total" id="moTotal">
+        <span class="mo-total-label">Total Orders</span>
+        <span class="mo-total-val" id="moTotalVal">--</span>
+      </div>
+    </div>
+
     <!-- News for symbol -->
     <div class="drawer-news">
       <h3>Tin tức liên quan</h3>
@@ -142,12 +346,62 @@
 </aside>
 <div class="drawer-overlay" id="drawerOverlay"></div>
 
+<!-- ═══ STAT LIST POPUP ══════════════════════════════════════ -->
+<div class="stat-popup-overlay" id="statPopupOverlay"></div>
+<div class="stat-popup" id="statPopup">
+  <div class="stat-popup-header">
+    <h3 id="statPopupTitle">--</h3>
+    <button class="btn-close" id="statPopupClose">&times;</button>
+  </div>
+  <div class="stat-popup-body" id="statPopupBody"></div>
+</div>
+
+<!-- ═══ NEWS MODAL ══════════════════════════════════════════ -->
+<div class="news-modal-overlay" id="newsModalOverlay"></div>
+<div class="news-modal" id="newsModal">
+  <div class="nm-header">
+    <span class="nm-stock" id="nmStock"></span>
+    <h3 id="nmTitle">--</h3>
+    <button class="btn-close" id="nmClose">&times;</button>
+  </div>
+  <div class="nm-meta" id="nmMeta"></div>
+  <div class="nm-toolbar">
+    <select id="nmLangFrom" class="nm-lang-select">
+      <option value="en">English</option>
+      <option value="vi">Tiếng Việt</option>
+      <option value="zh">Chinese</option>
+      <option value="ja">Japanese</option>
+      <option value="ko">Korean</option>
+    </select>
+    <span class="nm-arrow">→</span>
+    <select id="nmLangTo" class="nm-lang-select">
+      <option value="vi" selected>Tiếng Việt</option>
+      <option value="en">English</option>
+      <option value="zh">Chinese</option>
+      <option value="ja">Japanese</option>
+      <option value="ko">Korean</option>
+    </select>
+    <button class="nm-translate-btn" id="nmTranslateBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2v3"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+      Dịch bài viết
+    </button>
+    <button class="nm-reset-btn" id="nmResetBtn" style="display:none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      Bản gốc
+    </button>
+  </div>
+  <div class="nm-content" id="nmContent"></div>
+  <div class="nm-footer">
+    <a href="#" id="nmLink" target="_blank" class="nm-ext-link">Mở nguồn gốc →</a>
+  </div>
+</div>
+
 <!-- ═══ TOAST ════════════════════════════════════════════════ -->
 <div id="toasts" class="toasts"></div>
 
 <!-- ═══ SCRIPTS ══════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="/js/app.js"></script>
+<script src="/js/app.js?v=20260310g"></script>
 </body>
 </html>

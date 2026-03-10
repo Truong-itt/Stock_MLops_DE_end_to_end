@@ -35,13 +35,16 @@ SCYLLA_PORT  = 9042
 SCYLLA_KS    = "stock_data"
 
 POLL_INTERVAL_SEC = 60      # chạy mỗi 60s
-LOOKBACK_MINUTES  = 10      # mỗi lần lấy 10 phút gần nhất
+LOOKBACK_MINUTES  = 10      # mỗi lần lấy 10 phút gần nhất (1m, 5m)
+LOOKBACK_HOURS    = 12      # cho interval 1h, 3h, 6h
 
 # Map ClickHouse view → ScyllaDB interval label
 INTERVAL_VIEWS = {
     "1m":    "v_ohlcv_1m",
     "5m":    "v_ohlcv_5m",
     "1h":    "v_ohlcv_1h",
+    "3h":    "v_ohlcv_3h",
+    "6h":    "v_ohlcv_6h",
 }
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -251,10 +254,13 @@ def main():
     signal.signal(signal.SIGTERM, _stop)
 
     while running:
-        since = datetime.now(timezone.utc) - timedelta(minutes=LOOKBACK_MINUTES)
-
         total = 0
         for interval, view in INTERVAL_VIEWS.items():
+            # 1h, 3h, 6h dùng lookback lớn hơn để bắt được bucket đầu giờ
+            if interval in ("1h", "3h", "6h"):
+                since = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
+            else:
+                since = datetime.now(timezone.utc) - timedelta(minutes=LOOKBACK_MINUTES)
             n = sync_ohlcv(ch_client, scylla_session, interval, view, since)
             total += n
             if n > 0:

@@ -123,7 +123,69 @@ SELECT
 FROM stock_warehouse.stock_ticks
 GROUP BY symbol, bucket;
 
--- ── 5. BẢNG DAILY SUMMARY ──────────────────────────────────────────
+-- ── 5. BẢNG OHLCV 3 GIỜ ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS stock_warehouse.stock_ohlcv_3h
+(
+    symbol          String,
+    bucket          DateTime,
+    open            AggregateFunction(argMin, Float64, DateTime64(3)),
+    close           AggregateFunction(argMax, Float64, DateTime64(3)),
+    high            AggregateFunction(max, Float64),
+    low             AggregateFunction(min, Float64),
+    volume          AggregateFunction(count, UInt64),
+    last_change_pct AggregateFunction(argMax, Float64, DateTime64(3))
+)
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(bucket)
+ORDER BY (symbol, bucket);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS stock_warehouse.mv_ohlcv_3h
+TO stock_warehouse.stock_ohlcv_3h
+AS
+SELECT
+    symbol,
+    toStartOfInterval(event_time, INTERVAL 3 HOUR) AS bucket,
+    argMinState(price, event_time)          AS open,
+    argMaxState(price, event_time)          AS close,
+    maxState(price)                         AS high,
+    minState(price)                         AS low,
+    countState(toUInt64(1))                 AS volume,
+    argMaxState(coalesce(change_percent, 0), event_time) AS last_change_pct
+FROM stock_warehouse.stock_ticks
+GROUP BY symbol, bucket;
+
+-- ── 6. BẢNG OHLCV 6 GIỜ ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS stock_warehouse.stock_ohlcv_6h
+(
+    symbol          String,
+    bucket          DateTime,
+    open            AggregateFunction(argMin, Float64, DateTime64(3)),
+    close           AggregateFunction(argMax, Float64, DateTime64(3)),
+    high            AggregateFunction(max, Float64),
+    low             AggregateFunction(min, Float64),
+    volume          AggregateFunction(count, UInt64),
+    last_change_pct AggregateFunction(argMax, Float64, DateTime64(3))
+)
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(bucket)
+ORDER BY (symbol, bucket);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS stock_warehouse.mv_ohlcv_6h
+TO stock_warehouse.stock_ohlcv_6h
+AS
+SELECT
+    symbol,
+    toStartOfInterval(event_time, INTERVAL 6 HOUR) AS bucket,
+    argMinState(price, event_time)          AS open,
+    argMaxState(price, event_time)          AS close,
+    maxState(price)                         AS high,
+    minState(price)                         AS low,
+    countState(toUInt64(1))                 AS volume,
+    argMaxState(coalesce(change_percent, 0), event_time) AS last_change_pct
+FROM stock_warehouse.stock_ticks
+GROUP BY symbol, bucket;
+
+-- ── 7. BẢNG DAILY SUMMARY ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS stock_warehouse.stock_ohlcv_daily
 (
     symbol          String,
@@ -154,7 +216,7 @@ SELECT
 FROM stock_warehouse.stock_ticks
 GROUP BY symbol, trade_date;
 
--- ── 6. VIEW TIỆN DÙNG ĐỂ QUERY ─────────────────────────────────────
+-- ── 8. VIEW TIỆN DÙNG ĐỂ QUERY ─────────────────────────────────────
 -- Query OHLCV 1 phút: SELECT * FROM stock_warehouse.v_ohlcv_1m WHERE symbol='FPT'
 CREATE VIEW IF NOT EXISTS stock_warehouse.v_ohlcv_1m AS
 SELECT
@@ -195,6 +257,34 @@ SELECT
     countMerge(volume)         AS volume,
     argMaxMerge(last_change_pct) AS change_percent
 FROM stock_warehouse.stock_ohlcv_1h
+GROUP BY symbol, bucket
+ORDER BY symbol, bucket;
+
+CREATE VIEW IF NOT EXISTS stock_warehouse.v_ohlcv_3h AS
+SELECT
+    symbol,
+    bucket,
+    argMinMerge(open)          AS open,
+    argMaxMerge(close)         AS close,
+    maxMerge(high)             AS high,
+    minMerge(low)              AS low,
+    countMerge(volume)         AS volume,
+    argMaxMerge(last_change_pct) AS change_percent
+FROM stock_warehouse.stock_ohlcv_3h
+GROUP BY symbol, bucket
+ORDER BY symbol, bucket;
+
+CREATE VIEW IF NOT EXISTS stock_warehouse.v_ohlcv_6h AS
+SELECT
+    symbol,
+    bucket,
+    argMinMerge(open)          AS open,
+    argMaxMerge(close)         AS close,
+    maxMerge(high)             AS high,
+    minMerge(low)              AS low,
+    countMerge(volume)         AS volume,
+    argMaxMerge(last_change_pct) AS change_percent
+FROM stock_warehouse.stock_ohlcv_6h
 GROUP BY symbol, bucket
 ORDER BY symbol, bucket;
 

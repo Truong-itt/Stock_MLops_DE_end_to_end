@@ -2,6 +2,7 @@ services:
   producer:
     container_name: producer
     build: .
+    restart: unless-stopped
     # depends_on:
     #   schema-registry:
     #     condition: service_healthy
@@ -15,8 +16,10 @@ services:
   agg-worker:
     container_name: agg-worker
     build: .
-    command: ["python", "agg_worker.py"]
+    command: ["python", "-u", "agg_worker.py"]
     restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./log:/var/log/stockraw/
     networks:

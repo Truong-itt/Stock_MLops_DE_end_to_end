@@ -135,9 +135,9 @@ services:
         kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_vn  --partitions 1 --replication-factor 1
         kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_dif --partitions 1 --replication-factor 1
 
-        echo 'Ensure partition count = 20...'
-        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_vn  --partitions 20
-        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_dif --partitions 20
+        echo 'Ensure partition count = 30...'
+        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_vn  --partitions 30
+        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_dif --partitions 30
 
         echo 'Execute reassignment (RF=3)...'
         kafka-reassign-partitions --bootstrap-server kafka-1:29092 --reassignment-json-file /tmp/reassign_rf3.json --execute
@@ -152,7 +152,7 @@ services:
         kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_vn  | head -n 20
         kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_dif | head -n 20
 
-        echo '✅ Done (partitions=20, RF=3)'
+        echo '✅ Done (partitions=30, RF=3)'
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.6.0

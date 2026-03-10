@@ -21,6 +21,16 @@
     {"topic":"stock_price_vn","partition":17,"replicas":[1,2,3]},
     {"topic":"stock_price_vn","partition":18,"replicas":[1,2,3]},
     {"topic":"stock_price_vn","partition":19,"replicas":[1,2,3]},
+    {"topic":"stock_price_vn","partition":20,"replicas":[1,2,3]},
+    {"topic":"stock_price_vn","partition":21,"replicas":[2,3,1]},
+    {"topic":"stock_price_vn","partition":22,"replicas":[3,1,2]},
+    {"topic":"stock_price_vn","partition":23,"replicas":[1,2,3]},
+    {"topic":"stock_price_vn","partition":24,"replicas":[2,3,1]},
+    {"topic":"stock_price_vn","partition":25,"replicas":[3,1,2]},
+    {"topic":"stock_price_vn","partition":26,"replicas":[1,2,3]},
+    {"topic":"stock_price_vn","partition":27,"replicas":[2,3,1]},
+    {"topic":"stock_price_vn","partition":28,"replicas":[3,1,2]},
+    {"topic":"stock_price_vn","partition":29,"replicas":[1,2,3]},
 
     {"topic":"stock_price_dif","partition":0,"replicas":[1,2,3]},
     {"topic":"stock_price_dif","partition":1,"replicas":[1,2,3]},
@@ -41,6 +51,16 @@
     {"topic":"stock_price_dif","partition":16,"replicas":[1,2,3]},
     {"topic":"stock_price_dif","partition":17,"replicas":[1,2,3]},
     {"topic":"stock_price_dif","partition":18,"replicas":[1,2,3]},
-    {"topic":"stock_price_dif","partition":19,"replicas":[1,2,3]}
+    {"topic":"stock_price_dif","partition":19,"replicas":[1,2,3]},
+    {"topic":"stock_price_dif","partition":20,"replicas":[1,2,3]},
+    {"topic":"stock_price_dif","partition":21,"replicas":[2,3,1]},
+    {"topic":"stock_price_dif","partition":22,"replicas":[3,1,2]},
+    {"topic":"stock_price_dif","partition":23,"replicas":[1,2,3]},
+    {"topic":"stock_price_dif","partition":24,"replicas":[2,3,1]},
+    {"topic":"stock_price_dif","partition":25,"replicas":[3,1,2]},
+    {"topic":"stock_price_dif","partition":26,"replicas":[1,2,3]},
+    {"topic":"stock_price_dif","partition":27,"replicas":[2,3,1]},
+    {"topic":"stock_price_dif","partition":28,"replicas":[3,1,2]},
+    {"topic":"stock_price_dif","partition":29,"replicas":[1,2,3]}
   ]
 }
