@@ -10,7 +10,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/css/style.css?v=20260310h" />
+  <link rel="stylesheet" href="/css/style.css?v=20260320g" />
   <script>
     /* ── Theme: runs before paint to avoid FOUC ── */
     (function(){
@@ -68,6 +68,7 @@
       <span class="dot"></span>
       <span class="label">Đang kết nối</span>
     </div>
+    <button class="sync-btn" id="syncBtn" type="button" title="Đồng bộ lại dữ liệu">Dong bo lai</button>
     <div class="clock" id="clock">--:--:--</div>
   </div>
 </header>
@@ -123,6 +124,8 @@
           <option value="pct_asc">% Giảm mạnh nhất</option>
           <option value="vol_desc">KL cao → thấp</option>
         </select>
+        <button class="toolbar-btn" id="addSymbolBtn" type="button">Them ma</button>
+        <span class="toolbar-meta" id="configuredCount">Cau hinh: --</span>
       </div>
       <span class="row-count" id="rowCount"></span>
     </div>
@@ -136,17 +139,18 @@
             <th>Giá</th>
             <th>Thay đổi</th>
             <th>%</th>
+            <th>BOCPD</th>
             <th>Mở cửa</th>
             <th>Cao</th>
             <th>Thấp</th>
             <th>KL</th>
             <th>VWAP</th>
-            <th>Ngày</th>
+            <th>Thoi gian</th>
             <th class="fav-col" title="Quan tâm">Quan tâm</th>
           </tr>
         </thead>
         <tbody id="stockBody">
-          <tr><td colspan="12" class="empty-row"><div class="spinner"></div>Đang tải dữ liệu …</td></tr>
+          <tr><td colspan="13" class="empty-row"><div class="spinner"></div>Đang tải dữ liệu …</td></tr>
         </tbody>
       </table>
     </div>
@@ -218,6 +222,17 @@
         </div>
       </div>
 
+      <div class="ov-panel ov-regime">
+        <div class="ov-panel-header">
+          <h3>BOCPD Tín Hiệu Thị Trường</h3>
+          <span class="ov-panel-sub">Top changepoint / whale-watch theo thị trường đang lọc</span>
+        </div>
+        <div class="ov-chart-wrap" style="height:320px">
+          <canvas id="overviewSignalChart"></canvas>
+        </div>
+        <div class="ov-signal-summary" id="ovSignalSummary"></div>
+      </div>
+
     </div>
   </section>
 
@@ -269,6 +284,15 @@
       <div class="wl-chart-wrap"><canvas id="wlPriceChart"></canvas></div>
       <div class="wl-chart-legend" id="wlChartLegend"></div>
     </div>
+
+    <div class="wl-chart-section wl-signal-section" id="wlSignalSection" style="display:none">
+      <div class="wl-chart-header">
+        <h3>BOCPD các mã quan tâm</h3>
+        <span class="wl-section-sub">CP probability và expected run length hiện tại</span>
+      </div>
+      <div class="wl-chart-wrap"><canvas id="wlSignalChart"></canvas></div>
+      <div class="wl-chart-legend" id="wlSignalLegend"></div>
+    </div>
     
     <!-- News Section -->
     <div class="watchlist-news-section" id="wlNewsSection" style="display:none">
@@ -308,7 +332,7 @@
     <!-- Chart -->
     <div class="chart-section">
       <div class="chart-bar">
-        <span class="chart-title">Biểu đồ giá</span>
+        <span class="chart-title" id="drChartTitle">Biểu đồ giá</span>
         <select id="drInterval">
           <option value="1m" selected>1 phút</option>
           <option value="5m">5 phút</option>
@@ -322,6 +346,20 @@
         </select>
       </div>
       <div class="chart-wrap"><canvas id="drChart"></canvas></div>
+    </div>
+
+    <!-- BOCPD / Changepoint -->
+    <div class="cp-section">
+      <div class="cp-header">
+        <h3>BOCPD Regime / Whale Signal</h3>
+        <span class="cp-sub">Run length r_t va changepoint probability</span>
+      </div>
+      <div class="cp-grid" id="drCpInfo">
+        <div class="cp-empty">Dang tai BOCPD signal ...</div>
+      </div>
+      <div class="cp-chart-wrap">
+        <canvas id="drCpChart"></canvas>
+      </div>
     </div>
     <!-- Matched Orders -->
     <div class="matched-orders-section">
@@ -366,7 +404,32 @@
     <h3 id="statPopupTitle">--</h3>
     <button class="btn-close" id="statPopupClose">&times;</button>
   </div>
-  <div class="stat-popup-body" id="statPopupBody"></div>
+<div class="stat-popup-body" id="statPopupBody"></div>
+</div>
+
+<!-- ═══ SYMBOL MODAL ════════════════════════════════════════ -->
+<div class="news-modal-overlay" id="symbolModalOverlay"></div>
+<div class="news-modal symbol-modal" id="symbolModal">
+  <div class="nm-header">
+    <span class="nm-stock">SYSTEM</span>
+    <h3>Them ma moi vao he thong</h3>
+    <button class="btn-close" id="symbolModalClose">&times;</button>
+  </div>
+  <div class="nm-meta">Ma moi se duoc ghi vao registry dung chung va backend se no topic partition neu can.</div>
+  <form class="symbol-form" id="symbolForm">
+    <label class="symbol-form-label" for="symbolInput">Ma co phieu</label>
+    <input class="symbol-form-input" id="symbolInput" name="symbol" type="text" placeholder="VD: VCB hoac AAPL" maxlength="20" required />
+    <label class="symbol-form-label" for="symbolMarket">Thi truong</label>
+    <select class="symbol-form-input" id="symbolMarket" name="market">
+      <option value="vn">Viet Nam</option>
+      <option value="world">The gioi</option>
+    </select>
+    <div class="symbol-form-status" id="symbolFormStatus" aria-live="polite"></div>
+    <div class="symbol-form-actions">
+      <button class="nm-reset-btn" id="symbolCancelBtn" type="button">Huy</button>
+      <button class="nm-translate-btn" id="symbolSubmitBtn" type="submit">Them ma</button>
+    </div>
+  </form>
 </div>
 
 <!-- ═══ NEWS MODAL ══════════════════════════════════════════ -->
@@ -415,6 +478,6 @@
 <!-- ═══ SCRIPTS ══════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="/js/app.js?v=20260310n"></script>
+<script src="/js/app.js?v=20260320g"></script>
 </body>
 </html>

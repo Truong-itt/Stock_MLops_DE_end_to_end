@@ -23,7 +23,9 @@ COPY agg_worker.py .
 COPY news_worker.py .
 COPY sentiment_worker.py .
 COPY reprocess_sentiment.py .
+COPY data_gap_tool.py .
 COPY logger.py .
+COPY symbol_registry.py .
 # COPY utils.py .
 
 CMD ["python", "stream_data.py"]

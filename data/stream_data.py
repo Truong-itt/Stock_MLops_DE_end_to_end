@@ -15,11 +15,12 @@ import asyncio
 import signal
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 import yfinance as yf
 
 from logger import get_logger
+from symbol_registry import SymbolRegistry
 
 logger = get_logger()
 
@@ -32,20 +33,6 @@ from confluent_kafka.schema_registry.avro import AvroSerializer
 # CONFIG
 BOOTSTRAP_SERVERS = "kafka-1:29092"
 SCHEMA_REGISTRY_URL = "http://schema-registry:8081"
-
-VIETNAM_STOCKS = [
-    "VCB", "BID", "FPT", "HPG", "CTG", "VHM", "TCB", "VPB", "VNM", "MBB",
-    "GAS", "ACB", "MSN", "GVR", "LPB", "SSB", "STB", "VIB", "MWG", "HDB",
-    "PLX", "POW", "SAB", "BCM", "PDR", "KDH", "NVL", "DGC", "SHB", "EIB",
-]
-
-INTERNATIONAL_STOCKS = [
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "AVGO",
-    "JPM", "V", "UNH", "WMT", "MA", "XOM", "JNJ", "PG", "HD", "COST",
-    "NFLX", "AMD", "INTC", "DIS", "PYPL", "BA", "CRM", "ORCL", "CSCO", "ABT",
-]
-
-ALL_STOCKS = VIETNAM_STOCKS + INTERNATIONAL_STOCKS
 
 AVRO_SCHEMA_STR = """
 {
@@ -116,13 +103,10 @@ def to_avro_record(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
 
-def resolve_topic_and_partition(stock_id: str):
+def resolve_topic_and_partition(stock_id: str, registry: SymbolRegistry):
     """Xác định topic và partition dựa vào mã cổ phiếu."""
-    if stock_id in VIETNAM_STOCKS:
-        return "stock_price_vn", VIETNAM_STOCKS.index(stock_id) % 30
-    elif stock_id in INTERNATIONAL_STOCKS:
-        return "stock_price_dif", INTERNATIONAL_STOCKS.index(stock_id) % 30
-    return None, None
+    _, topic, partition = registry.get_symbol_location(stock_id)
+    return topic, partition
 
 
 # KAFKA PRODUCER
@@ -144,6 +128,7 @@ def create_producer(bootstrap: str, schema_registry_url: str) -> SerializingProd
 async def run(bootstrap: str, schema_registry_url: str):
     logger.info("Initializing Kafka Avro producer ...")
     producer = create_producer(bootstrap, schema_registry_url)
+    registry = SymbolRegistry()
 
     sent = 0
     skipped = 0
@@ -179,7 +164,7 @@ async def run(bootstrap: str, schema_registry_url: str):
             return
 
         stock_id = record["id"]
-        topic, partition = resolve_topic_and_partition(stock_id)
+        topic, partition = resolve_topic_and_partition(stock_id, registry)
         if topic is None:
             skipped += 1
             logger.debug("Unknown stock_id=%s, skipped", stock_id)
@@ -209,22 +194,46 @@ async def run(bootstrap: str, schema_registry_url: str):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _signal_handler)
 
+    subscribed_symbols: Set[str] = set()
+
+    async def sync_subscriptions(ws):
+        while not stop_event.is_set():
+            try:
+                registry.reload_if_changed()
+                all_symbols = registry.get_all_symbols()
+                new_symbols = [sym for sym in all_symbols if sym not in subscribed_symbols]
+                if new_symbols:
+                    await ws.subscribe(new_symbols)
+                    subscribed_symbols.update(new_symbols)
+                    logger.info(
+                        "Subscribed %d new symbols from registry (total=%d)",
+                        len(new_symbols),
+                        len(subscribed_symbols),
+                    )
+            except Exception as e:
+                logger.warning("Registry sync error: %s", e)
+            await asyncio.sleep(10)
+
+    initial_symbols = registry.get_all_symbols()
     logger.info("Connecting to Yahoo Finance WebSocket ...")
-    logger.info("Subscribing to %d symbols", len(ALL_STOCKS))
+    logger.info("Subscribing to %d symbols from registry", len(initial_symbols))
 
     try:
         async with yf.AsyncWebSocket() as ws:
-            await ws.subscribe(ALL_STOCKS)
+            if initial_symbols:
+                await ws.subscribe(initial_symbols)
+                subscribed_symbols.update(initial_symbols)
             logger.info("Subscribed! Listening for real-time ticks ...")
 
             # listen() chạy mãi — ta dùng stop_event để thoát gracefully
             listen_task = asyncio.create_task(
                 ws.listen(message_handler=on_message)
             )
+            registry_task = asyncio.create_task(sync_subscriptions(ws))
 
             # chờ stop signal hoặc listen kết thúc
             done, pending = await asyncio.wait(
-                [listen_task, asyncio.create_task(stop_event.wait())],
+                [listen_task, registry_task, asyncio.create_task(stop_event.wait())],
                 return_when=asyncio.FIRST_COMPLETED,
             )
 

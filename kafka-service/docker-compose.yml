@@ -118,7 +118,6 @@ services:
         condition: service_healthy
     volumes:
       - ./log4j.properties:/tmp/log4j.properties:ro
-      - ./reassign_rf3.json:/tmp/reassign_rf3.json:ro
     environment:
       KAFKA_LOG4J_OPTS: "-Dlog4j.configuration=file:/tmp/log4j.properties"
     networks:
@@ -132,27 +131,19 @@ services:
         cub kafka-ready -b kafka-1:29092 3 120
 
         echo 'Ensure topics exist...'
-        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_vn  --partitions 1 --replication-factor 1
-        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_dif --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_vn  --partitions 50 --replication-factor 3 || true
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic stock_price_dif --partitions 50 --replication-factor 3 || true
+        kafka-topics --bootstrap-server kafka-1:29092 --create --if-not-exists --topic news-sentiment --partitions 12 --replication-factor 3 || true
 
-        echo 'Ensure partition count = 30...'
-        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_vn  --partitions 30
-        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_dif --partitions 30
-
-        echo 'Execute reassignment (RF=3)...'
-        kafka-reassign-partitions --bootstrap-server kafka-1:29092 --reassignment-json-file /tmp/reassign_rf3.json --execute
-
-        echo 'Verify reassignment...'
-        for i in 1 2 3 4 5 6 7 8 9 10; do
-          kafka-reassign-partitions --bootstrap-server kafka-1:29092 --reassignment-json-file /tmp/reassign_rf3.json --verify || true
-          sleep 3
-        done
+        echo 'Ensure partition count >= 50...'
+        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_vn  --partitions 50 || true
+        kafka-topics --bootstrap-server kafka-1:29092 --alter --topic stock_price_dif --partitions 50 || true
 
         echo 'Describe topics (head):'
         kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_vn  | head -n 20
         kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_dif | head -n 20
 
-        echo '✅ Done (partitions=30, RF=3)'
+        echo '✅ Done (partitions>=50, RF=3)'
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.6.0

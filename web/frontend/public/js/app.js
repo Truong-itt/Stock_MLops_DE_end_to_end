@@ -3,7 +3,8 @@
    ╚══════════════════════════════════════════════════════════════╝ */
 
 const API   = window.location.origin;
-const WS_URL= `ws://${window.location.host}/ws`;
+const WS_PROTO = window.location.protocol === 'https:' ? 'wss' : 'ws';
+const WS_URL= `${WS_PROTO}://${window.location.host}/ws`;
 
 // ─── State ──────────────────────────────────────────────────
 let stocks      = {};          // keyed by symbol
@@ -17,20 +18,12 @@ let sortMode    = "symbol";
 let dataSource  = "daily";     // "latest" | "daily" | "merged"
 let sectorFilter = "";         // current sector filter
 let marketFilter = "";         // "" = all, "vn" = Vietnam, "world" = International
+let symbolConfig = { vn: [], world: [] };
+let cpSignals   = {};          // keyed by symbol, latest BOCPD state
 
 // ─── Stock lists for market filter ─────────────────────────
-const VN_STOCKS = new Set([
-  'VCB','BID','FPT','HPG','CTG','VHM','TCB','VPB','VNM','MBB',
-  'GAS','ACB','MSN','GVR','LPB','SSB','STB','VIB','MWG','HDB',
-  'PLX','POW','SAB','BCM','PDR','KDH','NVL','DGC','SHB','EIB',
-  'VIC','REE','VJC','GMD','TPB','VRE','VCI','SSI','HCM','VGC',
-  'DPM','KBC','DCM','VND','PNJ','HNG','PVD','DHG','NT2','DIG',
-]);
-const WORLD_STOCKS = new Set([
-  'AAPL','MSFT','NVDA','AMZN','GOOGL','META','TSLA','BRK-B','LLY','AVGO',
-  'JPM','V','UNH','WMT','MA','XOM','JNJ','PG','HD','COST',
-  'NFLX','AMD','INTC','DIS','PYPL','BA','CRM','ORCL','CSCO','ABT',
-]);
+let VN_STOCKS = new Set();
+let WORLD_STOCKS = new Set();
 
 // ─── Company name mapping ───────────────────────────────────
 const COMPANY_NAME = {
@@ -156,6 +149,7 @@ const $ = id => document.getElementById(id);
 const el = {
   connBadge : $("connBadge"),
   connLabel : $("connBadge")?.querySelector(".label"),
+  syncBtn   : $("syncBtn"),
   clock     : $("clock"),
   sTotal    : $("sTotal"),   sUp: $("sUp"),   sDown: $("sDown"),
   sFlat     : $("sFlat"),    sVol: $("sVol"), sTime: $("sTime"),
@@ -163,6 +157,7 @@ const el = {
   rowCount  : $("rowCount"),
   search    : $("searchInput"),
   sort      : $("sortSelect"),
+  configuredCount: $("configuredCount"),
   tabs      : $("tabs"),
   newsGrid  : $("newsGrid"),
   drawer    : $("drawer"),
@@ -172,33 +167,210 @@ const el = {
   drChange  : $("drChange"),
   drInfo    : $("drInfo"),
   drInterval: $("drInterval"),
+  drChartTitle: $("drChartTitle"),
   drChart   : $("drChart"),
+  drCpInfo  : $("drCpInfo"),
+  drCpChart : $("drCpChart"),
   drNews    : $("drNews"),
   drawerClose: $("drawerClose"),
   toasts    : $("toasts"),
   moBody    : $("moBody"),
   moTotalVal: $("moTotalVal"),
+  symbolFormStatus: $("symbolFormStatus"),
 };
 let moTimer = null;  // matched orders auto-refresh timer
 let breadthChart = null;  // market breadth chart instance
 let volumeTop10Chart = null; // top 10 volume chart instance
 let currentTopTab = 'gainers'; // current top tab
+let cpChart = null;
+let cpTimer = null;
+let cpSummaryTimer = null;
+let overviewSignalChart = null;
+let wlSignalChart = null;
 
 /* ═══════════════════════════════════════════════════════════
    UTILITIES
    ═══════════════════════════════════════════════════════════ */
 const fmt  = (n,d=2) => n==null||isNaN(n)?"--":Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 const fmtV = v => {if(v==null)return"--";if(v>=1e9)return(v/1e9).toFixed(2)+"B";if(v>=1e6)return(v/1e6).toFixed(2)+"M";if(v>=1e3)return(v/1e3).toFixed(1)+"K";return v.toString()};
-const fmtTime = t => {if(!t)return"--";const d=new Date(t);return isNaN(d)?"--":d.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",second:"2-digit"})};
-const fmtDate = t => {if(!t)return"--";const d=new Date(t);return isNaN(d)?t:d.toLocaleDateString("vi-VN")};
-const fmtDT   = t => {if(!t)return"--";const d=new Date(t);return isNaN(d)?t:d.toLocaleString("vi-VN")};
+const fmtProb = n => n==null||isNaN(n)?"--":`${(Number(n)*100).toFixed(2)}%`;
 const cls = v => v>0?"up":v<0?"down":"flat";
 
+function parseChartTime(value){
+  if(value == null || value === "") return null;
+  if(value instanceof Date) return isNaN(value) ? null : value;
+
+  if(typeof value === "number"){
+    const d = new Date(value);
+    return isNaN(d) ? null : d;
+  }
+
+  if(typeof value === "string"){
+    const raw = value.trim();
+    if(!raw) return null;
+    let normalized = raw;
+
+    // Backend often serializes Scylla timestamps without timezone suffix.
+    if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(raw)){
+      normalized = `${raw}Z`;
+    }else if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+      normalized = `${raw}T00:00:00Z`;
+    }
+
+    const d = new Date(normalized);
+    return isNaN(d) ? null : d;
+  }
+
+  const d = new Date(value);
+  return isNaN(d) ? null : d;
+}
+
+function getRowTime(row){
+  return parseChartTime(row?.ts || row?.bucket_ts || row?.trade_date || row?.bucket || row?.timestamp);
+}
+
+function normalizePriceSeries(rows){
+  return (rows || [])
+    .map(row => {
+      const time = getRowTime(row);
+      const close = row?.close ?? row?.price;
+      if(!time || close == null || !Number.isFinite(Number(close))) return null;
+      return {
+        x: time,
+        y: Number(close),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.x - b.x);
+}
+
+const fmtTime = t => {const d=parseChartTime(t);return d?d.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"--"};
+const fmtDate = t => {const d=parseChartTime(t);return d?d.toLocaleDateString("vi-VN"):String(t||"--")};
+const fmtDT   = t => {const d=parseChartTime(t);return d?d.toLocaleString("vi-VN"):String(t||"--")};
+
 function toast(msg, type="ok"){
+  if(!el.toasts) return;
   const t=document.createElement("div");
   t.className=`toast ${type}`;t.textContent=msg;
   el.toasts.appendChild(t);
   setTimeout(()=>{t.style.opacity="0";t.style.transform="translateX(100%)";setTimeout(()=>t.remove(),300)},3500);
+}
+
+function setSymbolFormStatus(message="", type=""){
+  if(!el.symbolFormStatus) return;
+  el.symbolFormStatus.textContent = message;
+  el.symbolFormStatus.className = `symbol-form-status${type ? ` ${type}` : ""}`;
+}
+
+function drawCanvasEmpty(canvas, message){
+  if(!canvas) return;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#4e556b";
+  ctx.font = "13px Inter";
+  ctx.textAlign = "center";
+  ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+}
+
+function ingestChangepoint(rows){
+  if(!Array.isArray(rows)) return;
+  cpSignals = {};
+  rows.forEach(row => {
+    const sym = String(row?.symbol || '').toUpperCase();
+    if(!sym) return;
+    cpSignals[sym] = row;
+  });
+  if(Object.keys(stocks).length) renderTable();
+  if(_ovData) renderOverviewSignalChart();
+  const wlStocks = [...watchlist].filter(sym=>stocks[sym]);
+  if(wlStocks.length) renderWatchlistSignalChart(wlStocks);
+}
+
+async function loadChangepointSummary(silent=true){
+  try{
+    const resp = await fetch(`${API}/api/changepoint/latest`);
+    const json = await resp.json();
+    if(resp.ok && json.status === "ok"){
+      ingestChangepoint(json.data || []);
+    }else if(!silent){
+      throw new Error(json.detail || "Khong tai duoc BOCPD summary");
+    }
+  }catch(err){
+    console.error("loadChangepointSummary error:", err);
+    if(!silent) toast(`BOCPD loi: ${err.message || err}`, "err");
+  }
+}
+
+async function loadSymbolRegistry(){
+  try{
+    const r = await fetch(`${API}/api/system/symbols`);
+    const j = await r.json();
+    if(j.status !== "ok") throw new Error("bad registry response");
+    const markets = j.data?.markets || {};
+    symbolConfig = {
+      vn: markets.vn?.symbols || [],
+      world: markets.world?.symbols || [],
+    };
+    VN_STOCKS = new Set(symbolConfig.vn);
+    WORLD_STOCKS = new Set(symbolConfig.world);
+    const allowedSymbols = new Set([...symbolConfig.vn, ...symbolConfig.world]);
+    const cleanedWatchlist = [...watchlist].filter(sym => allowedSymbols.has(sym));
+    if(cleanedWatchlist.length !== watchlist.size){
+      watchlist = new Set(cleanedWatchlist);
+      saveWatchlist();
+    }
+    if(el.configuredCount){
+      el.configuredCount.textContent = `Cau hinh: ${j.data?.total_symbols || 0} ma`;
+    }
+    if(Object.keys(stocks).length){
+      renderTable();
+      updateStats();
+    }
+    return j.data;
+  }catch(err){
+    console.error("loadSymbolRegistry error:", err);
+    if(el.configuredCount){
+      el.configuredCount.textContent = "Cau hinh: loi tai";
+    }
+    return null;
+  }
+}
+
+async function resyncData(showToast=true){
+  try{
+    if(el.syncBtn){
+      el.syncBtn.disabled = true;
+      el.syncBtn.textContent = "Dang dong bo...";
+    }
+    const [registryResp, latestResp, cpResp] = await Promise.all([
+      loadSymbolRegistry(),
+      fetch(`${API}/api/stocks/latest`).then(r=>r.json()),
+      fetch(`${API}/api/changepoint/latest`).then(r=>r.json()).catch(()=>({status:"err"})),
+    ]);
+    if(latestResp.status === "ok"){
+      ingest(latestResp.data || [], true);
+    } else {
+      throw new Error(latestResp.detail || "Khong tai duoc du lieu bang gia");
+    }
+    if(cpResp.status === "ok"){
+      ingestChangepoint(cpResp.data || []);
+    }
+    if(document.querySelector(".tab.active")?.dataset.tab === "news"){
+      loadAllNews();
+    }
+    if(showToast){
+      const total = registryResp?.total_symbols ?? Object.keys(stocks).length;
+      toast(`Dong bo xong ${total} ma`, "ok");
+    }
+  }catch(err){
+    console.error("resyncData error:", err);
+    if(showToast) toast(`Dong bo that bai: ${err.message || err}`, "err");
+  }finally{
+    if(el.syncBtn){
+      el.syncBtn.disabled = false;
+      el.syncBtn.textContent = "Dong bo lai";
+    }
+  }
 }
 
 // Normalise row: auto-detect schema by checking which fields exist
@@ -220,6 +392,7 @@ function norm(row){
       vwap:   row.vwap!=null?row.vwap:null,
       exchange: row.exchange,
       date:   row.timestamp,
+      isRealtime: true,
       market_hours: row.market_hours,
       last_size: row.last_size,
     };
@@ -237,6 +410,7 @@ function norm(row){
     vwap:   row.vwap,
     exchange: row.exchange,
     date:   row.trade_date,
+    isRealtime: false,
     market_hours: row.market_hours,
     last_size: null,
   };
@@ -307,6 +481,10 @@ function ingest(rows, full){
   el.sTime.textContent=fmtTime(new Date());
 
   if(selected && changed.has(selected)) updateDrawerPrice();
+  if(document.querySelector(".tab.active")?.dataset.tab === "watchlist"){
+    const hasWatchlistChanges = [...watchlist].some(sym => changed.has(sym));
+    if(hasWatchlistChanges) loadWatchlist();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -351,13 +529,27 @@ function renderTable(changed){
   el.rowCount.textContent=`${rows.length} mã`;
 
   if(!rows.length){
-    el.body.innerHTML=`<tr><td colspan="12" class="empty-row">${Object.keys(stocks).length?"Không tìm thấy":'<div class="spinner"></div>Đang tải …'}</td></tr>`;
+    el.body.innerHTML=`<tr><td colspan="13" class="empty-row">${Object.keys(stocks).length?"Không tìm thấy":'<div class="spinner"></div>Đang tải …'}</td></tr>`;
     return;
   }
 
   el.body.innerHTML=rows.map(s=>{
     const c=cls(s.pct);
     const isFav = isInWatchlist(s.symbol);
+    const cp = cpSignals[s.symbol] || null;
+    const cpClass =
+      !cp ? "unknown"
+      : cp.regime_label === "whale-watch" ? "up"
+      : cp.regime_label === "transition" ? "flat"
+      : "down";
+    const cpLabel =
+      !cp ? "Chua co"
+      : cp.regime_label === "whale-watch" ? "Whale"
+      : cp.regime_label === "transition" ? "Transition"
+      : "Stable";
+    const cpTitle = cp
+      ? `CP prob: ${fmtProb(cp.cp_prob)} | E[r_t]: ${fmt(cp.expected_run_length, 2)} | MAP r_t: ${fmt(cp.map_run_length, 0)}`
+      : "Chua co du lieu BOCPD";
     // Cell-level flash: only highlight specific cells that changed
     let priceFlash="",changeFlash="",pctFlash="",openFlash="",highFlash="",lowFlash="",volFlash="",vwapFlash="";
     if(changed&&changed.has(s.symbol)){
@@ -387,12 +579,18 @@ function renderTable(changed){
       <td class="num ${c} ${priceFlash}" onclick="openDrawer('${s.symbol}')">${fmt(s.price)}</td>
       <td class="num ${c} ${changeFlash}" onclick="openDrawer('${s.symbol}')">${(s.change>=0?"+":"")+fmt(s.change)}</td>
       <td class="num ${c} ${pctFlash}" onclick="openDrawer('${s.symbol}')">${(s.pct>=0?"+":"")+fmt(s.pct)}%</td>
+      <td onclick="openDrawer('${s.symbol}')">
+        <div class="cp-table" title="${cpTitle}">
+          <span class="cp-pill ${cpClass}">${cpLabel}</span>
+          <span class="cp-pill-meta">${cp ? fmtProb(cp.cp_prob) : '--'}</span>
+        </div>
+      </td>
       <td class="num ${openFlash}" onclick="openDrawer('${s.symbol}')">${fmt(s.open)}</td>
       <td class="num ${highFlash}" onclick="openDrawer('${s.symbol}')">${fmt(s.high)}</td>
       <td class="num ${lowFlash}" onclick="openDrawer('${s.symbol}')">${fmt(s.low)}</td>
       <td class="num ${volFlash}" onclick="openDrawer('${s.symbol}')">${fmtV(s.volume)}</td>
       <td class="num ${vwapFlash}" onclick="openDrawer('${s.symbol}')">${s.vwap!=null?fmt(s.vwap,2):"--"}</td>
-      <td class="date-col" onclick="openDrawer('${s.symbol}')">${fmtDate(s.date)}</td>
+      <td class="date-col" onclick="openDrawer('${s.symbol}')">${s.isRealtime ? fmtDT(s.date) : fmtDate(s.date)}</td>
       <td class="fav-col"><button class="fav-btn ${isFav?'active':''}" onclick="event.stopPropagation();toggleWatchlist('${s.symbol}')" title="${isFav?'Bỏ quan tâm':'Thêm quan tâm'}">${isFav?'★':'☆'}</button></td>
     </tr>`;
   }).join("");
@@ -407,8 +605,14 @@ function openDrawer(sym){
   el.overlay.classList.add("open");
   updateDrawerPrice();
   loadOHLCV(sym);
+  loadChangepoint(sym);
   loadMatchedOrders(sym);
   loadDrawerNews(sym);
+  if(cpTimer){clearInterval(cpTimer);cpTimer=null;}
+  cpTimer=setInterval(()=>{
+    if(selected===sym) loadChangepoint(sym);
+    else { clearInterval(cpTimer); cpTimer=null; }
+  }, 4000);
 }
 
 function closeDrawer(){
@@ -416,6 +620,8 @@ function closeDrawer(){
   el.overlay.classList.remove("open");
   selected=null;
   if(moTimer){clearInterval(moTimer);moTimer=null;}
+  if(cpTimer){clearInterval(cpTimer);cpTimer=null;}
+  if(cpChart){cpChart.destroy();cpChart=null;}
 }
 
 function updateDrawerPrice(){
@@ -465,33 +671,50 @@ function updateDrawerFavBtn(){
 /* ── Chart ───────────────────────────────────────────────── */
 function loadOHLCV(sym){
   const iv=el.drInterval.value;
-  if(ws&&ws.readyState===1){
-    ws.send(JSON.stringify({type:"get_ohlcv",symbol:sym,interval:iv}));
-  } else {
-    fetch(`${API}/api/stocks/ohlcv/${sym}?interval=${iv}`)
-      .then(r=>r.json()).then(j=>{if(j.status==="ok")renderChart(j.data,sym)}).catch(()=>{});
+  if(el.drChartTitle){
+    el.drChartTitle.textContent = `Biểu đồ giá`;
   }
+  fetch(`${API}/api/stocks/ohlcv/${encodeURIComponent(sym)}?interval=${encodeURIComponent(iv)}`)
+    .then(r=>r.json())
+    .then(j=>{
+      if(j.status!=="ok") return;
+      const meta = j.meta || {};
+      if(el.drChartTitle){
+        if(meta.fallback_used && meta.resolved_interval){
+          el.drChartTitle.textContent = `Biểu đồ giá (${meta.resolved_interval} fallback từ ${meta.requested_interval})`;
+        }else if(meta.resolved_interval){
+          el.drChartTitle.textContent = `Biểu đồ giá (${meta.resolved_interval})`;
+        }else{
+          el.drChartTitle.textContent = `Biểu đồ giá`;
+        }
+      }
+      renderChart(j.data,sym);
+    })
+    .catch(err=>{
+      console.error("loadOHLCV error:", err);
+      if(el.drChartTitle){
+        el.drChartTitle.textContent = "Biểu đồ giá";
+      }
+      renderChart([], sym);
+    });
 }
 
 function renderChart(data,sym){
   const canvas=el.drChart; if(!canvas)return;
   if(chart){chart.destroy();chart=null}
-  if(!data||!data.length){
-    const ctx=canvas.getContext("2d");
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle="#4e556b";ctx.font="13px Inter";ctx.textAlign="center";
-    ctx.fillText("Chưa có dữ liệu OHLCV",canvas.width/2,canvas.height/2);
+  const series = normalizePriceSeries(data);
+  if(!series.length){
+    drawCanvasEmpty(canvas, "Chua co du lieu OHLCV");
     return;
   }
-  const labels=data.map(d=>new Date(d.ts));
-  const closes=data.map(d=>d.close);
+  const closes=series.map(point=>point.y);
   const isUp=closes.length>=2&&closes[closes.length-1]>=closes[0];
   const color=isUp?"#10b981":"#ef4444";
   const bg=isUp?"rgba(16,185,129,.08)":"rgba(239,68,68,.08)";
 
   chart=new Chart(canvas,{
     type:"line",
-    data:{labels,datasets:[{label:`${sym} Close`,data:closes,borderColor:color,backgroundColor:bg,fill:true,tension:.35,pointRadius:0,borderWidth:2}]},
+    data:{datasets:[{label:`${sym} Close`,data:series,borderColor:color,backgroundColor:bg,fill:true,tension:.35,pointRadius:0,borderWidth:2}]},
     options:{
       responsive:true,maintainAspectRatio:false,
       interaction:{mode:"index",intersect:false},
@@ -499,6 +722,177 @@ function renderChart(data,sym){
       scales:{
         x:{type:"time",ticks:{color:"#4e556b",maxTicksLimit:7},grid:{color:"rgba(31,39,57,.5)"}},
         y:{ticks:{color:"#4e556b"},grid:{color:"rgba(31,39,57,.5)"}},
+      },
+    },
+  });
+}
+
+/* ── Changepoint / BOCPD ───────────────────────────────── */
+async function loadChangepoint(sym){
+  if(!el.drCpInfo || !el.drCpChart) return;
+  try{
+    const [latestResp, historyResp] = await Promise.all([
+      fetch(`${API}/api/changepoint/${sym}`),
+      fetch(`${API}/api/changepoint/${sym}/history?limit=120&days=5`),
+    ]);
+
+    const latestJson = await latestResp.json().catch(()=>({}));
+    const historyJson = await historyResp.json().catch(()=>({}));
+
+    if(latestResp.ok && latestJson.status === "ok"){
+      cpSignals[sym] = latestJson.data;
+      renderChangepointInfo(latestJson.data);
+    } else {
+      renderChangepointInfo(null);
+    }
+
+    if(historyResp.ok && historyJson.status === "ok"){
+      renderChangepointChart(historyJson.data || [], sym);
+    } else {
+      renderChangepointChart([], sym);
+    }
+  }catch(err){
+    console.error("loadChangepoint error:", err);
+    renderChangepointInfo(null);
+    renderChangepointChart([], sym);
+  }
+}
+
+function renderChangepointInfo(data){
+  if(!el.drCpInfo) return;
+  if(!data){
+    el.drCpInfo.innerHTML = '<div class="cp-empty">Chua co du lieu BOCPD cho ma nay.</div>';
+    return;
+  }
+
+  const cpClass = (data.cp_prob || 0) >= 0.25 ? 'up' : (data.cp_prob || 0) >= 0.1 ? 'flat' : 'down';
+  const whaleClass = (data.whale_score || 0) >= 0.35 ? 'up' : (data.whale_score || 0) >= 0.15 ? 'flat' : 'down';
+  const zClass = (data.innovation_zscore || 0) >= 2 ? 'up' : (data.innovation_zscore || 0) >= 1 ? 'flat' : 'down';
+
+  const cards = [
+    {label:'CP Prob', value: fmtProb(data.cp_prob), klass: cpClass},
+    {label:'E[r_t]', value: fmt(data.expected_run_length, 2), klass: 'flat'},
+    {label:'MAP r_t', value: fmt(data.map_run_length, 0), klass: 'flat'},
+    {label:'Return', value: `${(data.return_value||0) >= 0 ? '+' : ''}${fmt((data.return_value||0)*100, 3)}%`, klass: cls(data.return_value||0)},
+    {label:'Pred Vol', value: fmt((data.predictive_volatility||0)*100, 3) + '%', klass: 'flat'},
+    {label:'Z Score', value: fmt(data.innovation_zscore, 2), klass: zClass},
+    {label:'Whale Score', value: fmtProb(data.whale_score), klass: whaleClass},
+    {label:'Regime', value: data.regime_label || '--', klass: data.regime_label === 'whale-watch' ? 'up' : data.regime_label === 'transition' ? 'flat' : 'down'},
+  ];
+
+  el.drCpInfo.innerHTML = cards.map(card => `
+    <div class="cp-card">
+      <div class="cp-label">${card.label}</div>
+      <div class="cp-value ${card.klass}">${card.value}</div>
+    </div>
+  `).join('');
+}
+
+function renderChangepointChart(data, sym){
+  const canvas = el.drCpChart;
+  if(!canvas) return;
+  if(cpChart){ cpChart.destroy(); cpChart = null; }
+
+  if(!data || !data.length){
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#4e556b';
+    ctx.font = '13px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText('Chua co lich su r_t / changepoint', canvas.width / 2, canvas.height / 2);
+    return;
+  }
+
+  const labels = data.map(item => new Date(item.event_time));
+  const expectedRunLength = data.map(item => item.expected_run_length || 0);
+  const mapRunLength = data.map(item => item.map_run_length || 0);
+  const cpProb = data.map(item => item.cp_prob || 0);
+
+  cpChart = new Chart(canvas, {
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'line',
+          label: 'E[r_t]',
+          data: expectedRunLength,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,.12)',
+          tension: .28,
+          pointRadius: 0,
+          borderWidth: 2,
+          yAxisID: 'y',
+        },
+        {
+          type: 'line',
+          label: 'MAP r_t',
+          data: mapRunLength,
+          borderColor: '#60a5fa',
+          backgroundColor: 'transparent',
+          tension: .18,
+          pointRadius: 0,
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          yAxisID: 'y',
+        },
+        {
+          type: 'bar',
+          label: 'CP prob',
+          data: cpProb,
+          backgroundColor: 'rgba(239,68,68,.22)',
+          borderColor: '#ef4444',
+          borderWidth: 1,
+          yAxisID: 'y1',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color: '#7d849b', boxWidth: 10 } },
+        title: {
+          display: true,
+          text: `${sym} - Run length r_t theo thoi gian`,
+          color: '#c3c8d8',
+          font: { size: 12, weight: '600' },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if(ctx.dataset.label === 'CP prob') return `CP prob: ${(v*100).toFixed(2)}%`;
+              return `${ctx.dataset.label}: ${Number(v).toFixed(2)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'dd/MM/yyyy HH:mm:ss' },
+          ticks: { color: '#4e556b', maxTicksLimit: 6 },
+          grid: { color: 'rgba(31,39,57,.35)' },
+        },
+        y: {
+          position: 'left',
+          title: { display: true, text: 'Run length r_t', color: '#f59e0b' },
+          ticks: { color: '#f59e0b' },
+          grid: { color: 'rgba(31,39,57,.35)' },
+          beginAtZero: true,
+        },
+        y1: {
+          position: 'right',
+          title: { display: true, text: 'CP prob', color: '#ef4444' },
+          ticks: {
+            color: '#ef4444',
+            callback: value => `${(Number(value) * 100).toFixed(0)}%`,
+          },
+          min: 0,
+          max: 1,
+          grid: { drawOnChartArea: false },
+        },
       },
     },
   });
@@ -680,7 +1074,7 @@ el.drawerClose.addEventListener("click",closeDrawer);
 el.overlay.addEventListener("click",closeDrawer);
 el.drInterval.addEventListener("change",()=>{if(selected)loadOHLCV(selected)});
 document.getElementById('drFavBtn')?.addEventListener('click',()=>{if(selected)toggleWatchlist(selected)});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeDrawer();closeStatPopup();closeNewsModal()}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeDrawer();closeStatPopup();closeNewsModal();closeSymbolModal()}});
 
 // ── Stat card click → show list popup ────────────────────
 document.getElementById('cardUp')?.addEventListener('click',()=>openStatPopup('up'));
@@ -773,6 +1167,71 @@ document.getElementById('newsSearchInput')?.addEventListener('keydown',e=>{
   if(e.key==='Enter') loadAllNews();
 });
 
+function openSymbolModal(){
+  document.getElementById('symbolModal')?.classList.add('open');
+  document.getElementById('symbolModalOverlay')?.classList.add('open');
+  setSymbolFormStatus('');
+  const input = document.getElementById('symbolInput');
+  if(input){
+    input.value = '';
+    input.focus();
+  }
+}
+
+function closeSymbolModal(){
+  document.getElementById('symbolModal')?.classList.remove('open');
+  document.getElementById('symbolModalOverlay')?.classList.remove('open');
+  document.getElementById('symbolForm')?.reset();
+  setSymbolFormStatus('');
+}
+
+document.getElementById('addSymbolBtn')?.addEventListener('click', openSymbolModal);
+document.getElementById('symbolModalClose')?.addEventListener('click', closeSymbolModal);
+document.getElementById('symbolModalOverlay')?.addEventListener('click', closeSymbolModal);
+document.getElementById('symbolCancelBtn')?.addEventListener('click', closeSymbolModal);
+el.syncBtn?.addEventListener('click', ()=>resyncData(true));
+
+document.getElementById('symbolForm')?.addEventListener('submit', async e=>{
+  e.preventDefault();
+  const input = document.getElementById('symbolInput');
+  const market = document.getElementById('symbolMarket');
+  const submitBtn = document.getElementById('symbolSubmitBtn');
+  const symbol = input?.value?.trim()?.toUpperCase();
+  const selectedMarket = market?.value || 'vn';
+  if(!symbol) return;
+
+  try{
+    setSymbolFormStatus(`Dang them ${symbol} vao he thong...`, 'pending');
+    if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = 'Dang them...'; }
+    const r = await fetch(`${API}/api/system/symbols`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({symbol, market: selectedMarket}),
+    });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok || j.status !== 'ok'){
+      throw new Error(j.detail || `Khong the them ma (${r.status})`);
+    }
+    await loadSymbolRegistry();
+    await resyncData(false);
+    setSymbolFormStatus(
+      `${symbol} da them vao ${selectedMarket === 'vn' ? 'Viet Nam' : 'The gioi'} o partition ${j.data.partition}.`,
+      'ok'
+    );
+    toast(
+      `${symbol} -> p${j.data.partition} (${j.data.topic}, ${j.data.topic_partitions} partitions)`,
+      'ok'
+    );
+    setTimeout(()=>closeSymbolModal(), 700);
+  }catch(err){
+    console.error('add symbol error:', err);
+    setSymbolFormStatus(`Loi: ${err.message || err}`, 'err');
+    toast(`Khong the them ma: ${err.message || err}`, 'err');
+  }finally{
+    if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = 'Them ma'; }
+  }
+});
+
 /* ═══════════════════════════════════════════════════════════
    MARKET OVERVIEW (Thị trường)
    ═══════════════════════════════════════════════════════════ */
@@ -795,6 +1254,7 @@ function _refreshAllOverview(){
     renderBreadthChart(_ovData.breadth);
     renderTopTable();
     renderVolumeTop10Chart();
+    renderOverviewSignalChart();
   }
   if(_sentData) renderSentimentChart(_sentData);
 }
@@ -827,6 +1287,7 @@ async function loadMarketOverview(){
       renderBreadthChart(jOv.data.breadth);
       renderTopTable();
       renderVolumeTop10Chart();
+      renderOverviewSignalChart();
     }
     if(jSent.status==="ok"){
       _sentData = jSent.data;
@@ -1234,6 +1695,106 @@ function renderTopTable(){
   </table>`;
 }
 
+function renderOverviewSignalChart(){
+  const canvas = document.getElementById('overviewSignalChart');
+  const summary = document.getElementById('ovSignalSummary');
+  if(!canvas || !_ovData) return;
+  if(overviewSignalChart){ overviewSignalChart.destroy(); overviewSignalChart = null; }
+
+  const rows = _ovData.stocks
+    .filter(s => _ovMatchesMarket(s.symbol))
+    .map(s => ({ symbol: s.symbol, signal: cpSignals[s.symbol] }))
+    .filter(item => item.signal)
+    .map(item => ({
+      symbol: item.symbol,
+      cp_prob: Number(item.signal.cp_prob || 0),
+      whale_score: Number(item.signal.whale_score || 0),
+      run_length: Number(item.signal.expected_run_length || 0),
+      regime_label: item.signal.regime_label || 'stable',
+    }))
+    .sort((a,b)=>Math.max(b.whale_score,b.cp_prob)-Math.max(a.whale_score,a.cp_prob))
+    .slice(0, 12);
+
+  if(summary){
+    summary.innerHTML = rows.length ? rows.slice(0,6).map(row => `
+      <button class="ov-signal-chip" onclick="openDrawer('${row.symbol}')">
+        <strong>${row.symbol}</strong>
+        <span>${fmtProb(row.cp_prob)}</span>
+        <span class="${row.regime_label==='whale-watch'?'up':row.regime_label==='transition'?'flat':'down'}">${row.regime_label}</span>
+      </button>
+    `).join('') : '<span class="muted">Chưa có BOCPD summary cho thị trường đang lọc.</span>';
+  }
+
+  if(!rows.length){
+    drawCanvasEmpty(canvas, 'Chua co du lieu BOCPD thi truong');
+    return;
+  }
+
+  overviewSignalChart = new Chart(canvas, {
+    data: {
+      labels: rows.map(r => r.symbol),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'CP prob',
+          data: rows.map(r => r.cp_prob * 100),
+          backgroundColor: 'rgba(239,68,68,.22)',
+          borderColor: '#ef4444',
+          borderWidth: 1,
+          borderRadius: 6,
+          yAxisID: 'y',
+        },
+        {
+          type: 'line',
+          label: 'Whale score',
+          data: rows.map(r => r.whale_score * 100),
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,.12)',
+          tension: .28,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          yAxisID: 'y',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if(elements?.length){
+          const idx = elements[0].index;
+          if(rows[idx]) openDrawer(rows[idx].symbol);
+        }
+      },
+      plugins: {
+        legend: { labels: { color: '#7d849b', boxWidth: 10 } },
+        tooltip: {
+          callbacks: {
+            afterBody: items => {
+              const idx = items?.[0]?.dataIndex;
+              if(idx == null) return '';
+              return `E[r_t]: ${fmt(rows[idx].run_length, 2)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#7d849b', font: { family: "'JetBrains Mono', monospace" } },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#4e556b', callback: v => `${v.toFixed ? v.toFixed(1) : v}%` },
+          grid: { color: 'rgba(31,39,57,.5)' },
+          title: { display: true, text: '%', color: '#7d849b' },
+        },
+      },
+    },
+  });
+}
+
 /* Theme toggle is defined inline in index.html <head> for reliability */
 
 /* ═══════════════════════════════════════════════════════════
@@ -1247,6 +1808,7 @@ function loadWatchlist(){
   const content = document.getElementById('watchlistContent');
   const newsSection = document.getElementById('wlNewsSection');
   const chartSection = document.getElementById('wlChartSection');
+  const signalSection = document.getElementById('wlSignalSection');
   const wlInfo = document.getElementById('wlInfo');
   if(!content) return;
 
@@ -1257,6 +1819,7 @@ function loadWatchlist(){
     content.innerHTML = '<p class="muted">Chưa có mã nào trong danh sách quan tâm. Hãy bấm ☆ ở cột cuối bảng giá để thêm.</p>';
     if(newsSection) newsSection.style.display='none';
     if(chartSection) chartSection.style.display='none';
+    if(signalSection) signalSection.style.display='none';
     return;
   }
 
@@ -1264,7 +1827,10 @@ function loadWatchlist(){
   content.innerHTML = `<div class="wl-stocks-grid">${wlStocks.map(sym=>{
     const s = stocks[sym];
     const c = cls(s?.pct);
-    const vol = s?.vol ? (s.vol >= 1000000 ? (s.vol/1000000).toFixed(1) + 'M' : (s.vol >= 1000 ? (s.vol/1000).toFixed(0) + 'K' : s.vol)) : '--';
+    const vol = s?.volume ? fmtV(s.volume) : '--';
+    const cp = cpSignals[sym] || null;
+    const cpClass = !cp ? 'unknown' : cp.regime_label === 'whale-watch' ? 'up' : cp.regime_label === 'transition' ? 'flat' : 'down';
+    const cpLabel = !cp ? 'Chua co' : cp.regime_label === 'whale-watch' ? 'Whale' : cp.regime_label === 'transition' ? 'Transition' : 'Stable';
     return `<div class="wl-stock-card" onclick="openDrawer('${sym}')">
       <div class="wl-card-top">
         <div>
@@ -1281,6 +1847,10 @@ function loadWatchlist(){
         <div class="wl-card-label">Thay đổi</div>
         <div class="wl-card-change ${c}">${s?((s.pct>=0?'+':'')+fmt(s.pct)+'%'):'--'}</div>
       </div>
+      <div class="wl-card-signal">
+        <span class="cp-pill ${cpClass}">${cpLabel}</span>
+        <span class="wl-card-mono">${cp ? `CP ${fmtProb(cp.cp_prob)} · r ${fmt(cp.expected_run_length,1)}` : 'BOCPD --'}</span>
+      </div>
       <div class="wl-card-stats">
         <div class="wl-stat-item">
           <div class="wl-stat-value">${vol}</div>
@@ -1296,16 +1866,19 @@ function loadWatchlist(){
 
   // Show chart and news sections
   if(chartSection) chartSection.style.display='block';
+  if(signalSection) signalSection.style.display='block';
   if(newsSection) newsSection.style.display='block';
   
   // Load chart and news
   loadWatchlistChart(wlStocks);
+  renderWatchlistSignalChart(wlStocks);
   loadWatchlistNews(wlStocks);
 }
 
 // Watchlist multi-line chart
 async function loadWatchlistChart(symbols){
   const ctx = document.getElementById('wlPriceChart')?.getContext('2d');
+  const canvas = document.getElementById('wlPriceChart');
   const legendEl = document.getElementById('wlChartLegend');
   if(!ctx) return;
 
@@ -1318,31 +1891,22 @@ async function loadWatchlistChart(symbols){
   for(let i=0; i<symbols.length && i<10; i++){
     const sym = symbols[i];
     try{
-      const resp = await fetch(`${API}/api/stocks/ohlcv/${sym}?interval=${interval}`);
+      const resp = await fetch(`${API}/api/stocks/ohlcv/${encodeURIComponent(sym)}?interval=${encodeURIComponent(interval)}`);
       const data = await resp.json();
       if(data.status==='ok' && data.data?.length){
-        // Sort by timestamp ascending
-        const sorted = [...data.data].sort((a,b)=> new Date(a.bucket_ts||a.trade_date) - new Date(b.bucket_ts||b.trade_date));
-        
-        // Normalize prices to percentage change from first value
-        const firstPrice = sorted[0].close || sorted[0].price;
-        const normalized = sorted.map(d => {
-          const ts = new Date(d.bucket_ts || d.trade_date);
-          return {
-            time: ts.toLocaleTimeString('vi',{hour:'2-digit',minute:'2-digit'}),
-            rawTime: ts.getTime(),
-            value: firstPrice ? ((d.close || d.price) - firstPrice) / firstPrice * 100 : 0
-          };
-        });
-        
-        // Keep all labels for alignment
-        if(normalized.length > allLabels.length){
-          allLabels = normalized.map(d => d.time);
+        const points = normalizePriceSeries(data.data);
+        const firstPrice = points[0]?.y;
+        if(!points.length || !Number.isFinite(firstPrice) || firstPrice === 0){
+          continue;
         }
-        
+        const normalized = points.map(point => ({
+          x: point.x,
+          y: ((point.y - firstPrice) / firstPrice) * 100,
+        }));
+
         datasets.push({
           label: sym,
-          data: normalized.map(d => d.value),
+          data: normalized,
           borderColor: chartColors[i % chartColors.length],
           backgroundColor: 'transparent',
           borderWidth: 2,
@@ -1357,6 +1921,11 @@ async function loadWatchlistChart(symbols){
   }
 
   if(!datasets.length){
+    if(wlPriceChart){
+      wlPriceChart.destroy();
+      wlPriceChart = null;
+    }
+    if(canvas) drawCanvasEmpty(canvas, 'Chua co du lieu bieu do');
     if(legendEl) legendEl.innerHTML = '<span class="muted">Không có dữ liệu biểu đồ</span>';
     return;
   }
@@ -1368,7 +1937,6 @@ async function loadWatchlistChart(symbols){
   wlPriceChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: allLabels,
       datasets
     },
     options: {
@@ -1384,7 +1952,12 @@ async function loadWatchlistChart(symbols){
         }
       },
       scales: {
-        x: { grid: { color: 'rgba(150,150,150,.1)' }, ticks: { color: '#888', maxTicksLimit: 8 } },
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'dd/MM HH:mm' },
+          grid: { color: 'rgba(150,150,150,.1)' },
+          ticks: { color: '#888', maxTicksLimit: 8 }
+        },
         y: { 
           grid: { color: 'rgba(150,150,150,.1)' }, 
           ticks: { 
@@ -1405,6 +1978,107 @@ async function loadWatchlistChart(symbols){
       </div>`
     ).join('');
   }
+}
+
+function renderWatchlistSignalChart(symbols){
+  const canvas = document.getElementById('wlSignalChart');
+  const legendEl = document.getElementById('wlSignalLegend');
+  if(!canvas) return;
+  if(wlSignalChart){ wlSignalChart.destroy(); wlSignalChart = null; }
+
+  const rows = symbols
+    .map(sym => ({ symbol: sym, signal: cpSignals[sym] }))
+    .filter(item => item.signal)
+    .map(item => ({
+      symbol: item.symbol,
+      cp_prob: Number(item.signal.cp_prob || 0) * 100,
+      run_length: Number(item.signal.expected_run_length || 0),
+      whale_score: Number(item.signal.whale_score || 0) * 100,
+      regime_label: item.signal.regime_label || 'stable',
+    }));
+
+  if(legendEl){
+    legendEl.innerHTML = rows.length
+      ? rows.map(row => `<div class="wl-legend-item">
+          <span class="cp-pill ${row.regime_label==='whale-watch'?'up':row.regime_label==='transition'?'flat':'down'}">${row.symbol}</span>
+          <span>CP ${row.cp_prob.toFixed(2)}% · r ${row.run_length.toFixed(1)}</span>
+        </div>`).join('')
+      : '<span class="muted">Chưa có tín hiệu BOCPD cho watchlist.</span>';
+  }
+
+  if(!rows.length){
+    drawCanvasEmpty(canvas, 'Chua co du lieu BOCPD cho watchlist');
+    return;
+  }
+
+  wlSignalChart = new Chart(canvas, {
+    data: {
+      labels: rows.map(r => r.symbol),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'CP prob',
+          data: rows.map(r => r.cp_prob),
+          backgroundColor: 'rgba(239,68,68,.22)',
+          borderColor: '#ef4444',
+          borderWidth: 1,
+          borderRadius: 6,
+          yAxisID: 'y',
+        },
+        {
+          type: 'line',
+          label: 'E[r_t]',
+          data: rows.map(r => r.run_length),
+          borderColor: '#60a5fa',
+          backgroundColor: 'rgba(96,165,250,.12)',
+          tension: .25,
+          pointRadius: 3,
+          borderWidth: 2,
+          yAxisID: 'y1',
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if(elements?.length){
+          const idx = elements[0].index;
+          if(rows[idx]) openDrawer(rows[idx].symbol);
+        }
+      },
+      plugins: {
+        legend: { labels: { color: '#7d849b', boxWidth: 10 } },
+        tooltip: {
+          callbacks: {
+            afterBody: items => {
+              const idx = items?.[0]?.dataIndex;
+              if(idx == null) return '';
+              return `Whale score: ${rows[idx].whale_score.toFixed(2)}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#7d849b', font: { family: "'JetBrains Mono', monospace" } },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          position: 'left',
+          ticks: { color: '#4e556b', callback: v => `${Number(v).toFixed(2)}%` },
+          grid: { color: 'rgba(150,150,150,.1)' },
+        },
+        y1: {
+          beginAtZero: true,
+          position: 'right',
+          ticks: { color: '#7d849b' },
+          grid: { drawOnChartArea: false },
+        }
+      }
+    }
+  });
 }
 
 // Chart interval change handler
@@ -1676,4 +2350,9 @@ document.getElementById('nmResetBtn')?.addEventListener('click', function() {
 /* ═══════════════════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════════════════ */
-connect();
+loadSymbolRegistry().finally(()=>{
+  connect();
+  resyncData(false);
+  if(cpSummaryTimer) clearInterval(cpSummaryTimer);
+  cpSummaryTimer = setInterval(()=>loadChangepointSummary(true), 12000);
+});

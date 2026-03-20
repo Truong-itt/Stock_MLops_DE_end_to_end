@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir \
 COPY sentiment_worker.py .
 COPY reprocess_sentiment.py .
 COPY logger.py .
+COPY symbol_registry.py .
 
 # Pre-download FinBERT model during build (optional, speeds up startup)
 RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='ProsusAI/finbert')" || true

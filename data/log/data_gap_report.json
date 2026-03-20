@@ -1,0 +1,1326 @@
+{
+  "generated_at": "2026-03-20T10:17:19.686288+00:00",
+  "summary": {
+    "registry_total": 100,
+    "missing_counts": {
+      "latest": 0,
+      "daily": 0,
+      "ticks": 0,
+      "agg_5m": 0,
+      "agg_1h": 0,
+      "agg_3h": 0,
+      "agg_6h": 0
+    }
+  },
+  "missing_symbols": {
+    "latest": [],
+    "daily": [],
+    "ticks": [],
+    "agg_5m": [],
+    "agg_1h": [],
+    "agg_3h": [],
+    "agg_6h": []
+  },
+  "symbols": [
+    {
+      "symbol": "VCB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VIC",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VHM",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "BID",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "TCB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "CTG",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VGI",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "ACV",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "FPT",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "HPG",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "MBB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "MSN",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "GVR",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "GAS",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VNM",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VPB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "ACB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "SSB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "STB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "HDB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "SHB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "LPB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VIB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "MWG",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "BCM",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PLX",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "SAB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "POW",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VJC",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "REE",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "GMD",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "TPB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VRE",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "VCI",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "SSI",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "HCM",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "DGC",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PDR",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "KDH",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "NVL",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "KBC",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "DPM",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "DCM",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PVD",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PNJ",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "DHG",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "DIG",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "BVH",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "BSR",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "EIB",
+      "market": "vn",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "AAPL",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "GOOGL",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "AMZN",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "META",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "TSLA",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "AVGO",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "TSM",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "BRK-B",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "WMT",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "LLY",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "JPM",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "TCEHY",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "XOM",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "V",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "JNJ",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "ASML",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "MA",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "NFLX",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "ORCL",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "COST",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PG",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "HD",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "ABBV",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "CVX",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "KO",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "SAP",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "BABA",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "TMUS",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PLTR",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "CRM",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "CSCO",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "AZN",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "AMD",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "DIS",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PEP",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "INTC",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "IBM",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "ADBE",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "TM",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "SHOP",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "UBER",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "BAC",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "MRK",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "LIN",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "MCD",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "ABT",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "UNH",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    },
+    {
+      "symbol": "PYPL",
+      "market": "world",
+      "missing": {
+        "latest": false,
+        "daily": false,
+        "ticks": false,
+        "agg_5m": false,
+        "agg_1h": false,
+        "agg_3h": false,
+        "agg_6h": false
+      }
+    }
+  ]
+}

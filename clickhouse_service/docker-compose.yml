@@ -10,6 +10,7 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./init:/docker-entrypoint-initdb.d   # auto-run SQL on first start
+      - ./config/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml
     environment:
       CLICKHOUSE_DB: stock_warehouse
       CLICKHOUSE_USER: default

@@ -1,0 +1,25 @@
+services:
+  changepoint-worker:
+    container_name: changepoint-worker
+    build: .
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SCYLLA_CONTACT_POINTS=scylla-node1,scylla-node2,scylla-node3
+      - SCYLLA_PORT=9042
+      - SCYLLA_KEYSPACE=stock_data
+      - SYMBOL_REGISTRY_PATH=/app/config/symbol_registry.json
+      - BOCPD_HAZARD_LAMBDA=90
+      - BOCPD_MAX_RUN_LENGTH=180
+      - BOCPD_BOOTSTRAP_LIMIT=120
+      - BOCPD_BOOTSTRAP_HISTORY_LIMIT=80
+      - BOCPD_POLL_INTERVAL=2.0
+    volumes:
+      - ../config:/app/config:rw
+    networks:
+      - stock-network
+
+networks:
+  stock-network:
+    name: stock-network
+    external: true

@@ -4,7 +4,18 @@ from decimal import Decimal
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional
+from pydantic import BaseModel, Field
+from cachetools import TTLCache
+import httpx
+import yfinance as yf
 from database import db
+from symbol_registry import SymbolRegistry
+
+try:
+    from confluent_kafka.admin import AdminClient, NewPartitions
+except ImportError:
+    AdminClient = None
+    NewPartitions = None
 
 try:
     from cassandra.util import Date as CassDate
@@ -12,6 +23,10 @@ except ImportError:
     CassDate = None
 
 logger = logging.getLogger("backend.routes")
+registry = SymbolRegistry()
+symbol_validation_cache = TTLCache(maxsize=512, ttl=900)
+YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
+VALID_QUOTE_TYPES = {"EQUITY", "ETF", "MUTUALFUND", "INDEX"}
 
 
 def _serialise(obj):
@@ -43,6 +58,143 @@ def ok(data):
 router = APIRouter(prefix="/api")
 
 
+class AddSymbolRequest(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=20)
+    market: str = Field(..., min_length=2, max_length=10)
+
+
+def _kafka_admin():
+    if AdminClient is None:
+        raise RuntimeError("Kafka admin client is unavailable")
+    return AdminClient({"bootstrap.servers": "kafka-1:29092,kafka-2:29092,kafka-3:29092"})
+
+
+def _ensure_topic_partitions(topic: str, desired_count: int) -> int:
+    admin = _kafka_admin()
+    md = admin.list_topics(topic=topic, timeout=10)
+    topic_meta = md.topics.get(topic)
+    if topic_meta is None or getattr(topic_meta, "error", None):
+        raise RuntimeError(f"Topic '{topic}' not found")
+
+    current = len(topic_meta.partitions)
+    if desired_count <= current:
+        return current
+
+    futures = admin.create_partitions([NewPartitions(topic, desired_count)])
+    futures[topic].result(20)
+    logger.info("Expanded topic %s partitions: %d -> %d", topic, current, desired_count)
+    return desired_count
+
+
+def _symbol_registry_payload():
+    data = registry.snapshot()
+    markets = {}
+    for market, meta in data["markets"].items():
+        symbols = list(meta.get("symbols", []))
+        markets[market] = {
+            "label": meta.get("label"),
+            "topic": meta.get("topic"),
+            "symbols": symbols,
+            "count": len(symbols),
+        }
+    return {
+        "updated_at": data.get("updated_at"),
+        "markets": markets,
+        "total_symbols": sum(item["count"] for item in markets.values()),
+    }
+
+
+async def _validate_symbol_exists(symbol: str, market: str) -> dict:
+    sym = str(symbol).strip().upper()
+    cache_key = f"{market}:{sym}"
+    cached = symbol_validation_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            response = await client.get(YAHOO_QUOTE_URL, params={"symbols": sym})
+            response.raise_for_status()
+            payload = response.json()
+        results = payload.get("quoteResponse", {}).get("result", []) or []
+        quote = None
+        for item in results:
+            item_symbol = str(item.get("symbol") or "").strip().upper()
+            if item_symbol == sym:
+                quote = item
+                break
+        if quote is None and results:
+            quote = results[0]
+
+        if quote:
+            quote_type = str(quote.get("quoteType") or "").strip().upper()
+            if quote_type and quote_type not in VALID_QUOTE_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Ma '{sym}' khong phai ma co phieu/chi so hop le ({quote_type})",
+                )
+
+            has_market_data = any(
+                quote.get(field) is not None
+                for field in (
+                    "regularMarketPrice",
+                    "regularMarketPreviousClose",
+                    "regularMarketDayHigh",
+                    "regularMarketDayLow",
+                    "regularMarketVolume",
+                )
+            )
+            if has_market_data:
+                validation = {
+                    "symbol": sym,
+                    "market": market,
+                    "name": quote.get("shortName") or quote.get("longName") or sym,
+                    "exchange": quote.get("fullExchangeName") or quote.get("exchange") or "Unknown",
+                    "quote_type": quote_type or None,
+                    "currency": quote.get("currency"),
+                }
+                symbol_validation_cache[cache_key] = validation
+                return validation
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("primary symbol validation failed for %s: %s", sym, exc)
+
+    try:
+        ticker = yf.Ticker(sym)
+        history = ticker.history(period="5d", interval="1d", auto_adjust=False)
+        if history.empty:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ma '{sym}' khong ton tai hoac khong co du lieu giao dich tren thi truong",
+            )
+
+        info = {}
+        try:
+            info = ticker.fast_info or {}
+        except Exception:
+            info = {}
+
+        validation = {
+            "symbol": sym,
+            "market": market,
+            "name": sym,
+            "exchange": str(info.get("exchange") or info.get("quote_type") or "Yahoo Finance"),
+            "quote_type": "EQUITY",
+            "currency": info.get("currency"),
+        }
+        symbol_validation_cache[cache_key] = validation
+        return validation
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("fallback symbol validation failed for %s: %s", sym, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Khong kiem tra duoc ma luc nay, vui long thu lai sau",
+        ) from exc
+
+
 def _build_daily_map(daily_rows):
     """Build lookup: symbol → latest daily_summary row (most recent trade_date)."""
     daily_map = {}
@@ -56,6 +208,43 @@ def _build_daily_map(daily_rows):
             if new_date and existing_date and str(new_date) > str(existing_date):
                 daily_map[sym] = r
     return daily_map
+
+
+@router.get("/system/symbols")
+async def get_system_symbols():
+    """Danh sách mã cấu hình cho producer/UI."""
+    try:
+        return ok(_symbol_registry_payload())
+    except Exception as e:
+        logger.error(f"get_system_symbols: {e}")
+        raise HTTPException(500, detail=str(e))
+
+
+@router.post("/system/symbols")
+async def add_system_symbol(payload: AddSymbolRequest):
+    """Thêm mã mới vào registry và nới Kafka partitions nếu cần."""
+    try:
+        validation = await _validate_symbol_exists(payload.symbol, payload.market)
+        saved, created, partition = registry.add_symbol(payload.market, payload.symbol)
+        topic = saved["markets"][payload.market]["topic"]
+        desired_partitions = len(saved["markets"][payload.market]["symbols"])
+        actual_partitions = _ensure_topic_partitions(topic, desired_partitions)
+        response = _symbol_registry_payload()
+        response["added"] = created
+        response["symbol"] = payload.symbol.upper()
+        response["market"] = payload.market
+        response["topic"] = topic
+        response["partition"] = partition
+        response["topic_partitions"] = actual_partitions
+        response["validation"] = validation
+        return ok(response)
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"add_system_symbol: {e}")
+        raise HTTPException(500, detail=str(e))
 
 
 # ────────────────────────────── Symbols ──────────────────────────────
@@ -91,6 +280,10 @@ async def get_latest_prices():
             "change, change_percent, vwap, exchange "
             "FROM stock_daily_summary"
         ))
+        registry_symbols = set(registry.get_all_symbols())
+        if registry_symbols:
+            latest = [row for row in latest if row.get("symbol") in registry_symbols]
+            daily = [row for row in daily if row.get("symbol") in registry_symbols]
 
         if not latest:
             return ok(daily)
@@ -118,6 +311,28 @@ async def get_latest_prices():
         for sym, r in daily_map.items():
             if sym not in seen:
                 merged.append(r)
+
+        # Keep the UI aligned with the configured registry even when a symbol
+        # has just been added and no latest/daily row has arrived yet.
+        for sym in registry.get_all_symbols():
+            if sym in seen or sym in daily_map:
+                continue
+            merged.append({
+                "symbol": sym,
+                "price": None,
+                "change": 0,
+                "change_percent": 0,
+                "open": None,
+                "high": None,
+                "low": None,
+                "day_volume": None,
+                "vwap": None,
+                "exchange": registry.get_market_for_symbol(sym) or "",
+                "timestamp": None,
+                "market_hours": None,
+                "quote_type": None,
+                "is_placeholder": True,
+            })
 
         return ok(merged)
     except Exception as e:
@@ -242,6 +457,62 @@ def _find_daily_ohlcv(symbol: str, days: int):
     return result
 
 
+def _sort_ohlcv_rows(rows):
+    def _key(item):
+        value = item.get("ts") or item.get("bucket") or item.get("trade_date")
+        return str(value or "")
+    return sorted(rows, key=_key)
+
+
+def _resolve_ohlcv(symbol: str, interval: str, bucket_date: Optional[str] = None):
+    requested = interval
+    intraday_candidates = {
+        "1m": ["1m", "5m", "1h", "3h", "6h", "15d"],
+        "5m": ["5m", "1m", "1h", "3h", "6h", "15d"],
+        "1h": ["1h", "3h", "6h", "5m", "1m", "15d"],
+        "3h": ["3h", "1h", "6h", "5m", "1m", "15d"],
+        "6h": ["6h", "3h", "1h", "5m", "1m", "15d"],
+    }
+    daily_candidates = {
+        "15d": ["15d", "1mo", "6mo", "1y"],
+        "1mo": ["1mo", "15d", "6mo", "1y"],
+        "6mo": ["6mo", "1mo", "1y", "15d"],
+        "1y": ["1y", "6mo", "1mo", "15d"],
+    }
+    daily_lengths = {
+        "15d": 15,
+        "1mo": 30,
+        "6mo": 180,
+        "1y": 365,
+    }
+
+    if requested in daily_candidates:
+        candidates = daily_candidates[requested]
+    else:
+        candidates = intraday_candidates.get(requested, [requested, "1h", "15d"])
+
+    for candidate in candidates:
+        if candidate in daily_lengths:
+            rows = _find_daily_ohlcv(symbol, daily_lengths[candidate])
+        else:
+            rows = _find_ohlcv(symbol, candidate, bucket_date)
+        rows = _sort_ohlcv_rows(rows)
+        if rows:
+            return rows, {
+                "requested_interval": requested,
+                "resolved_interval": candidate,
+                "fallback_used": candidate != requested,
+                "points": len(rows),
+            }
+
+    return [], {
+        "requested_interval": requested,
+        "resolved_interval": requested,
+        "fallback_used": False,
+        "points": 0,
+    }
+
+
 # ────────────────────────────── OHLCV Aggregated ─────────────────────
 @router.get("/stocks/ohlcv/{symbol}")
 async def get_ohlcv(
@@ -250,19 +521,8 @@ async def get_ohlcv(
     bucket_date: Optional[str] = Query(default=None),
 ):
     try:
-        # Map interval → query strategy
-        DAILY_INTERVALS = {
-            "15d": 15,
-            "1mo": 30,
-            "6mo": 180,
-            "1y": 365,
-        }
-        if interval in DAILY_INTERVALS:
-            rows = _find_daily_ohlcv(symbol, DAILY_INTERVALS[interval])
-        else:
-            # Intraday: 1m, 5m, 1h, 3h, 6h
-            rows = _find_ohlcv(symbol, interval, bucket_date)
-        return ok(rows)
+        rows, meta = _resolve_ohlcv(symbol, interval, bucket_date)
+        return {"status": "ok", "data": _serialise(rows), "meta": _serialise(meta)}
     except Exception as e:
         logger.error(f"get_ohlcv({symbol}, {interval}): {e}")
         raise HTTPException(500, detail=str(e))
@@ -293,6 +553,72 @@ async def get_daily_summary(
         return ok(rows)
     except Exception as e:
         logger.error(f"get_daily_summary({symbol}): {e}")
+        raise HTTPException(500, detail=str(e))
+
+
+# ────────────────────────────── Changepoint / BOCPD ─────────────────
+def _load_changepoint_history(symbol: str, days: int = 5, limit: int = 120):
+    sym = symbol.upper()
+    rows = []
+    for offset in range(days):
+        d = date.today() - timedelta(days=offset)
+        part = list(db.execute(
+            """
+            SELECT *
+            FROM stock_changepoint_history
+            WHERE symbol = %s AND bucket_date = %s
+            LIMIT %s
+            """,
+            [sym, str(d), limit],
+        ))
+        rows.extend(part)
+        if len(rows) >= limit:
+            break
+    rows.sort(key=lambda item: item.get("event_time") or datetime.min)
+    return rows[-limit:]
+
+
+@router.get("/changepoint/latest")
+async def get_all_changepoint_latest():
+    """Trả về trạng thái changepoint mới nhất của toàn bộ mã."""
+    try:
+        rows = list(db.execute("SELECT * FROM stock_changepoint_latest"))
+        rows.sort(key=lambda item: item.get("whale_score") or 0, reverse=True)
+        return ok(rows)
+    except Exception as e:
+        logger.error(f"get_all_changepoint_latest: {e}")
+        raise HTTPException(500, detail=str(e))
+
+
+@router.get("/changepoint/{symbol}")
+async def get_changepoint_latest(symbol: str):
+    """Trả về trạng thái changepoint mới nhất của một mã."""
+    try:
+        rows = list(db.execute(
+            "SELECT * FROM stock_changepoint_latest WHERE symbol = %s",
+            [symbol.upper()],
+        ))
+        if not rows:
+            raise HTTPException(404, detail="Changepoint signal not found for symbol")
+        return ok(rows[0])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_changepoint_latest({symbol}): {e}")
+        raise HTTPException(500, detail=str(e))
+
+
+@router.get("/changepoint/{symbol}/history")
+async def get_changepoint_history(
+    symbol: str,
+    limit: int = Query(default=120, le=500),
+    days: int = Query(default=5, le=14),
+):
+    """Trả về lịch sử BOCPD để web vẽ biểu đồ r_t theo thời gian."""
+    try:
+        return ok(_load_changepoint_history(symbol, days=days, limit=limit))
+    except Exception as e:
+        logger.error(f"get_changepoint_history({symbol}): {e}")
         raise HTTPException(500, detail=str(e))
 
 
@@ -542,13 +868,6 @@ SECTOR_MAP = {
 }
 
 
-VIETNAM_STOCKS_SET = {
-    "VCB", "BID", "FPT", "HPG", "CTG", "VHM", "TCB", "VPB", "VNM", "MBB",
-    "GAS", "ACB", "MSN", "GVR", "LPB", "SSB", "STB", "VIB", "MWG", "HDB",
-    "PLX", "POW", "SAB", "BCM", "PDR", "KDH", "NVL", "DGC", "SHB", "EIB",
-}
-
-
 @router.get("/sectors")
 async def get_sectors():
     """Trả về danh sách sectors và mapping symbol → sector."""
@@ -587,7 +906,7 @@ async def get_sentiment_overview():
             total_pos += pos
             total_neg += neg
             total_neu += neu
-            market = "vn" if code in VIETNAM_STOCKS_SET else "world"
+            market = registry.get_market_for_symbol(code) or "world"
             per_stock.append({
                 "symbol": code,
                 "positive": pos,

@@ -1,0 +1,58 @@
+{
+  "backfill_finished_at": "2026-03-20T10:16:36.728030+00:00",
+  "before": {
+    "registry_total": 101,
+    "missing_counts": {
+      "latest": 1,
+      "daily": 1,
+      "ticks": 1,
+      "agg_5m": 3,
+      "agg_1h": 1,
+      "agg_3h": 1,
+      "agg_6h": 1
+    }
+  },
+  "after": {
+    "registry_total": 101,
+    "missing_counts": {
+      "latest": 1,
+      "daily": 1,
+      "ticks": 1,
+      "agg_5m": 1,
+      "agg_1h": 1,
+      "agg_3h": 1,
+      "agg_6h": 1
+    }
+  },
+  "results": [
+    {
+      "symbol": "VNM",
+      "market": "vn",
+      "provider_symbol": "VNM.VN",
+      "status": "ok",
+      "inserted": {
+        "stock_prices": 231,
+        "stock_prices_agg": 281,
+        "stock_daily_summary": 53,
+        "stock_latest_prices": 1
+      }
+    },
+    {
+      "symbol": "DFJKL",
+      "market": "vn",
+      "status": "unresolved"
+    },
+    {
+      "symbol": "ABBV",
+      "market": "world",
+      "provider_symbol": "ABBV",
+      "status": "ok",
+      "inserted": {
+        "stock_prices": 390,
+        "stock_prices_agg": 450,
+        "stock_daily_summary": 60,
+        "stock_latest_prices": 1
+      }
+    }
+  ]
+}

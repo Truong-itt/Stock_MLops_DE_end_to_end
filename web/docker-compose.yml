@@ -11,6 +11,7 @@ services:
     volumes:
       - ./logs_callback:/app/logs_callback
       - ./frontend/public:/app/static:ro
+      - ../config:/app/config:rw
 
 networks:
   stock-network:

@@ -23,6 +23,7 @@ from cassandra.cluster import Cluster
 from confluent_kafka import Producer
 
 from logger import get_logger
+from symbol_registry import SymbolRegistry
 
 logger = get_logger()
 
@@ -37,20 +38,6 @@ KAFKA_BOOTSTRAP = "kafka-1:29092,kafka-2:29092,kafka-3:29092"
 KAFKA_TOPIC_SENTIMENT = "news-sentiment"
 
 POLL_INTERVAL_SEC = 300     # 5 phút
-
-VIETNAM_STOCKS = [
-    "VCB", "BID", "FPT", "HPG", "CTG", "VHM", "TCB", "VPB", "VNM", "MBB",
-    "GAS", "ACB", "MSN", "GVR", "LPB", "SSB", "STB", "VIB", "MWG", "HDB",
-    "PLX", "POW", "SAB", "BCM", "PDR", "KDH", "NVL", "DGC", "SHB", "EIB",
-]
-
-INTERNATIONAL_STOCKS = [
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "AVGO",
-    "JPM", "V", "UNH", "WMT", "MA", "XOM", "JNJ", "PG", "HD", "COST",
-    "NFLX", "AMD", "INTC", "DIS", "PYPL", "BA", "CRM", "ORCL", "CSCO", "ABT",
-]
-
-ALL_STOCKS = VIETNAM_STOCKS + INTERNATIONAL_STOCKS
 
 # Keyword lists for simple sentiment
 POSITIVE_WORDS = {
@@ -322,6 +309,7 @@ def save_articles(scylla_session, articles: List[Dict], kafka_producer=None) -> 
 # ═══════════════════════════════════════════════════════════════════════
 def main():
     logger.info("Starting news_worker ...")
+    registry = SymbolRegistry()
 
     cluster, scylla_session = connect_scylla()
     
@@ -341,8 +329,10 @@ def main():
     while running:
         total_fetched = 0
         total_inserted = 0
+        registry.reload_if_changed()
+        all_symbols = registry.get_all_symbols()
 
-        for symbol in ALL_STOCKS:
+        for symbol in all_symbols:
             # Thử Yahoo Finance RSS trước
             articles = fetch_yahoo_rss(symbol)
 
