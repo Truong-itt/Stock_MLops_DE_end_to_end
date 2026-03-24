@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
+import clickhouse_connect
 from cassandra.cluster import Cluster
 from cassandra.query import SimpleStatement, dict_factory
 
@@ -26,6 +27,11 @@ SCYLLA_KEYSPACE = os.getenv("SCYLLA_KEYSPACE", "stock_data")
 POLL_INTERVAL = float(os.getenv("BOCPD_POLL_INTERVAL", "2.0"))
 BOOTSTRAP_LIMIT = int(os.getenv("BOCPD_BOOTSTRAP_LIMIT", "120"))
 BOOTSTRAP_HISTORY_LIMIT = int(os.getenv("BOCPD_BOOTSTRAP_HISTORY_LIMIT", "80"))
+CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "clickhouse")
+CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "8123"))
+CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
+CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "truongittstock")
+CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "stock_warehouse")
 
 
 @dataclass
@@ -40,6 +46,7 @@ class ChangepointWorker:
     def __init__(self):
         self.cluster = None
         self.session = None
+        self.ch_client = None
         self.registry = SymbolRegistry()
         self.states: Dict[str, SymbolState] = {}
         self.all_symbols: List[str] = []
@@ -77,7 +84,38 @@ class ChangepointWorker:
                     time.sleep(delay)
         raise RuntimeError("Cannot connect to ScyllaDB")
 
+    def connect_clickhouse(self, max_retries: int = 30, delay: int = 4) -> None:
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(
+                    "Connecting to ClickHouse at %s:%s (attempt %d/%d)",
+                    CLICKHOUSE_HOST,
+                    CLICKHOUSE_PORT,
+                    attempt,
+                    max_retries,
+                )
+                self.ch_client = clickhouse_connect.get_client(
+                    host=CLICKHOUSE_HOST,
+                    port=CLICKHOUSE_PORT,
+                    username=CLICKHOUSE_USER,
+                    password=CLICKHOUSE_PASSWORD,
+                    database=CLICKHOUSE_DB,
+                )
+                logger.info("Connected to ClickHouse")
+                return
+            except Exception as exc:
+                logger.warning("ClickHouse connect failed (%d/%d): %s", attempt, max_retries, exc)
+                if attempt < max_retries:
+                    time.sleep(delay)
+        raise RuntimeError("Cannot connect to ClickHouse")
+
     def close(self) -> None:
+        if self.ch_client:
+            try:
+                self.ch_client.close()
+            except Exception:
+                pass
+            logger.info("ClickHouse connection closed")
         if self.cluster:
             self.cluster.shutdown()
             logger.info("ScyllaDB connection closed")
@@ -131,6 +169,72 @@ class ChangepointWorker:
             """
         )
 
+    def ensure_clickhouse_schema(self) -> None:
+        logger.info("Ensuring ClickHouse BOCPD schema exists")
+        self.ch_client.command(
+            """
+            CREATE TABLE IF NOT EXISTS stock_changepoint_events
+            (
+                symbol                String,
+                event_time            DateTime64(3),
+                price                 Float64,
+                return_value          Float64,
+                cp_prob               Float64,
+                expected_run_length   Float64,
+                map_run_length        Int32,
+                predictive_volatility Float64,
+                innovation_zscore     Float64,
+                whale_score           Float64,
+                hazard                Float64,
+                evidence              Float64,
+                regime_label          LowCardinality(String),
+                source                LowCardinality(String),
+                inserted_at           DateTime64(3) DEFAULT now64(3)
+            )
+            ENGINE = MergeTree()
+            PARTITION BY toYYYYMM(event_time)
+            ORDER BY (symbol, event_time)
+            TTL toDate(event_time) + INTERVAL 2 YEAR
+            SETTINGS index_granularity = 8192
+            """
+        )
+        self.ch_client.command(
+            """
+            DROP VIEW IF EXISTS v_changepoint_latest
+            """
+        )
+        self.ch_client.command(
+            """
+            CREATE VIEW v_changepoint_latest AS
+            SELECT
+                latest.symbol                AS symbol,
+                latest.event_time            AS event_time,
+                events.price                 AS price,
+                events.return_value          AS return_value,
+                events.cp_prob               AS cp_prob,
+                events.expected_run_length   AS expected_run_length,
+                events.map_run_length        AS map_run_length,
+                events.predictive_volatility AS predictive_volatility,
+                events.innovation_zscore     AS innovation_zscore,
+                events.whale_score           AS whale_score,
+                events.hazard                AS hazard,
+                events.evidence              AS evidence,
+                events.regime_label          AS regime_label,
+                events.source                AS source
+            FROM
+            (
+                SELECT
+                    symbol,
+                    max(event_time) AS event_time
+                FROM stock_changepoint_events
+                GROUP BY symbol
+            ) AS latest
+            ANY INNER JOIN stock_changepoint_events AS events
+                ON events.symbol = latest.symbol
+               AND events.event_time = latest.event_time
+            """
+        )
+
     def parse_event_time(self, raw_value) -> Optional[datetime]:
         if raw_value is None:
             return None
@@ -161,7 +265,72 @@ class ChangepointWorker:
             return None
         return (current_price / previous_price) - 1.0
 
-    def upsert_result(self, symbol: str, event_time: datetime, price: float, return_value: float, result: Dict, source: str) -> None:
+    def _event_time_for_clickhouse(self, value: datetime) -> datetime:
+        if value.tzinfo:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    def insert_clickhouse_result(
+        self,
+        symbol: str,
+        event_time: datetime,
+        price: float,
+        return_value: float,
+        result: Dict,
+        source: str,
+    ) -> None:
+        # ClickHouse keeps the BOCPD event stream as the source-of-truth for training.
+        self.ch_client.insert(
+            "stock_changepoint_events",
+            [
+                [
+                    symbol,
+                    self._event_time_for_clickhouse(event_time),
+                    float(price),
+                    float(return_value),
+                    float(result["cp_prob"]),
+                    float(result["expected_run_length"]),
+                    int(result["map_run_length"]),
+                    float(result["predictive_volatility"]),
+                    float(result["innovation_zscore"]),
+                    float(result["whale_score"]),
+                    float(result["hazard"]),
+                    float(result["evidence"]),
+                    str(result["regime_label"]),
+                    str(source),
+                ]
+            ],
+            column_names=[
+                "symbol",
+                "event_time",
+                "price",
+                "return_value",
+                "cp_prob",
+                "expected_run_length",
+                "map_run_length",
+                "predictive_volatility",
+                "innovation_zscore",
+                "whale_score",
+                "hazard",
+                "evidence",
+                "regime_label",
+                "source",
+            ],
+        )
+
+    def upsert_result(
+        self,
+        symbol: str,
+        event_time: datetime,
+        price: float,
+        return_value: float,
+        result: Dict,
+        source: str,
+        write_scylla: bool = True,
+    ) -> None:
+        self.insert_clickhouse_result(symbol, event_time, price, return_value, result, source)
+        if not write_scylla:
+            return
         bucket_day = event_time.date()
         self.execute(
             """
@@ -260,10 +429,18 @@ class ChangepointWorker:
             state.last_price = current_price
             state.last_event_time = event_time
 
-            # Keep startup load bounded: only write the tail needed by the UI.
-            if len(ordered) - idx <= BOOTSTRAP_HISTORY_LIMIT:
-                self.upsert_result(symbol, event_time, current_price, return_value, result, "bootstrap")
-                emitted += 1
+            # Keep Scylla bounded for serving, but persist fuller bootstrap history to ClickHouse.
+            write_scylla = len(ordered) - idx <= BOOTSTRAP_HISTORY_LIMIT
+            self.upsert_result(
+                symbol,
+                event_time,
+                current_price,
+                return_value,
+                result,
+                "bootstrap",
+                write_scylla=write_scylla,
+            )
+            emitted += 1
 
         if ordered:
             state.last_event_time, state.last_price = ordered[-1]
@@ -337,7 +514,9 @@ class ChangepointWorker:
 
     def run(self) -> None:
         self.connect()
+        self.connect_clickhouse()
         self.ensure_tables()
+        self.ensure_clickhouse_schema()
         self.sync_registry()
         logger.info("BOCPD worker started")
 

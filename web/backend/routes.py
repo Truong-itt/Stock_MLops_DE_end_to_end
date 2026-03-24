@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Query, HTTPException
@@ -9,6 +10,7 @@ from cachetools import TTLCache
 import httpx
 import yfinance as yf
 from database import db
+from clickhouse_db import ch_db
 from symbol_registry import SymbolRegistry
 
 try:
@@ -25,8 +27,12 @@ except ImportError:
 logger = logging.getLogger("backend.routes")
 registry = SymbolRegistry()
 symbol_validation_cache = TTLCache(maxsize=512, ttl=900)
+translation_cache = TTLCache(maxsize=256, ttl=3600)
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 VALID_QUOTE_TYPES = {"EQUITY", "ETF", "MUTUALFUND", "INDEX"}
+MYMEMORY_TRANSLATE_URL = "https://api.mymemory.translated.net/get"
+WHALE_ML_URL = os.getenv("WHALE_ML_URL", "http://whale-ml-service:8090").rstrip("/")
+WHALE_ML_TIMEOUT = float(os.getenv("WHALE_ML_TIMEOUT_SEC", "6.0"))
 
 
 def _serialise(obj):
@@ -61,6 +67,12 @@ router = APIRouter(prefix="/api")
 class AddSymbolRequest(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=20)
     market: str = Field(..., min_length=2, max_length=10)
+
+
+class TranslateRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=20000)
+    from_lang: str = Field(default="en", min_length=2, max_length=8)
+    to_lang: str = Field(default="vi", min_length=2, max_length=8)
 
 
 def _kafka_admin():
@@ -102,6 +114,64 @@ def _symbol_registry_payload():
         "markets": markets,
         "total_symbols": sum(item["count"] for item in markets.values()),
     }
+
+
+def _translation_chunks(text: str, max_len: int = 450):
+    text = str(text or "").strip()
+    if not text:
+        return []
+
+    chunks = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= max_len:
+            chunks.append(remaining)
+            break
+        break_point = remaining.rfind(". ", 0, max_len)
+        if break_point < 100:
+            break_point = remaining.rfind(" ", 0, max_len)
+        if break_point < 100:
+            break_point = max_len
+        chunks.append(remaining[: break_point + 1].strip())
+        remaining = remaining[break_point + 1 :].strip()
+    return [chunk for chunk in chunks if chunk]
+
+
+async def _translate_via_mymemory(text: str, from_lang: str, to_lang: str) -> dict:
+    text = str(text or "").strip()
+    from_lang = str(from_lang or "").strip().lower()
+    to_lang = str(to_lang or "").strip().lower()
+
+    if not text or from_lang == to_lang:
+        return {"translated_text": text, "source": "noop", "cached": False}
+
+    cache_key = f"{from_lang}|{to_lang}|{text}"
+    cached = translation_cache.get(cache_key)
+    if cached is not None:
+        return {"translated_text": cached, "source": "mymemory", "cached": True}
+
+    translated_chunks = []
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        for chunk in _translation_chunks(text):
+            try:
+                response = await client.get(
+                    MYMEMORY_TRANSLATE_URL,
+                    params={"q": chunk, "langpair": f"{from_lang}|{to_lang}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                translated = payload.get("responseData", {}).get("translatedText")
+                if payload.get("responseStatus") == 200 and translated:
+                    translated_chunks.append(translated)
+                else:
+                    translated_chunks.append(chunk)
+            except Exception as exc:
+                logger.warning("translation chunk failed (%s->%s): %s", from_lang, to_lang, exc)
+                translated_chunks.append(chunk)
+
+    translated_text = " ".join(translated_chunks).strip()
+    translation_cache[cache_key] = translated_text
+    return {"translated_text": translated_text, "source": "mymemory", "cached": False}
 
 
 async def _validate_symbol_exists(symbol: str, market: str) -> dict:
@@ -210,6 +280,364 @@ def _build_daily_map(daily_rows):
     return daily_map
 
 
+def _build_latest_map(latest_rows):
+    """Build lookup: symbol → latest intraday row."""
+    latest_map = {}
+    for row in latest_rows:
+        sym = row.get("symbol")
+        if sym:
+            latest_map[sym] = row
+    return latest_map
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except Exception:
+        try:
+            return int(float(value))
+        except Exception:
+            return default
+
+
+def _symbol_market_sets():
+    snapshot = registry.snapshot()
+    markets = snapshot.get("markets", {})
+    return {
+        "vn": set(markets.get("vn", {}).get("symbols", []) or []),
+        "world": set(markets.get("world", {}).get("symbols", []) or []),
+    }
+
+
+def _sql_quote(value: str) -> str:
+    return "'" + str(value or "").replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+def _load_changepoint_latest_rows():
+    try:
+        if not ch_db.is_connected():
+            ch_db.connect()
+        rows = ch_db.query("SELECT * FROM v_changepoint_latest")
+        if rows:
+            return rows
+    except Exception as exc:
+        logger.warning("ClickHouse changepoint latest query failed, fallback Scylla: %s", exc)
+    return list(db.execute("SELECT * FROM stock_changepoint_latest"))
+
+
+def _load_changepoint_latest_row(symbol: str):
+    sym = symbol.upper()
+    try:
+        if not ch_db.is_connected():
+            ch_db.connect()
+        rows = ch_db.query(
+            f"SELECT * FROM v_changepoint_latest WHERE symbol = {_sql_quote(sym)} LIMIT 1"
+        )
+        if rows:
+            return rows[0]
+    except Exception as exc:
+        logger.warning("ClickHouse changepoint latest symbol query failed, fallback Scylla: %s", exc)
+    rows = list(
+        db.execute(
+            "SELECT * FROM stock_changepoint_latest WHERE symbol = %s",
+            [sym],
+        )
+    )
+    return rows[0] if rows else None
+
+
+def _build_abnormal_alerts(latest_rows, daily_rows, cp_rows, limit: int = 16):
+    """
+    Derive suspicious/abnormal symbols from the BOCPD module.
+
+    We keep the BOCPD outputs as the primary signal and only enrich them with
+    price/volume context from market tables so the web UI can explain *why* a
+    symbol is being surfaced as a potential whale / abnormal move.
+    """
+    daily_map = _build_daily_map(daily_rows)
+    latest_map = _build_latest_map(latest_rows)
+    market_sets = _symbol_market_sets()
+    tracked_symbols = market_sets["vn"] | market_sets["world"]
+
+    alerts = []
+    for row in cp_rows:
+        symbol = str(row.get("symbol") or "").upper().strip()
+        if not symbol:
+            continue
+        if tracked_symbols and symbol not in tracked_symbols:
+            continue
+
+        latest = latest_map.get(symbol, {})
+        daily = daily_map.get(symbol, {})
+
+        cp_prob = _safe_float(row.get("cp_prob"))
+        whale_score = _safe_float(row.get("whale_score"))
+        innovation_zscore = _safe_float(row.get("innovation_zscore"))
+        expected_run_length = _safe_float(row.get("expected_run_length"))
+        map_run_length = _safe_float(row.get("map_run_length"))
+        predictive_volatility = _safe_float(row.get("predictive_volatility"))
+        return_value = _safe_float(row.get("return_value"))
+        hazard = _safe_float(row.get("hazard"))
+        evidence = _safe_float(row.get("evidence"))
+        regime_label = str(row.get("regime_label") or "stable").strip().lower()
+
+        price = latest.get("price")
+        if price is None:
+            price = daily.get("close")
+        change = latest.get("change")
+        if change is None:
+            change = daily.get("change")
+        pct = latest.get("change_percent")
+        if pct is None:
+            pct = daily.get("change_percent")
+        volume = latest.get("day_volume")
+        if not volume:
+            volume = daily.get("volume")
+
+        pct = _safe_float(pct)
+        change = _safe_float(change)
+        price = _safe_float(price, default=None)
+        volume = _safe_int(volume)
+
+        market = "other"
+        if symbol in market_sets["vn"]:
+            market = "vn"
+        elif symbol in market_sets["world"]:
+            market = "world"
+
+        freshness_score = 1.0 - min(max(expected_run_length, 0.0) / 90.0, 1.0)
+        innovation_score = min(max(innovation_zscore, 0.0), 4.0) / 4.0
+        movement_score = min(abs(pct) / 7.0, 1.0)
+        volatility_score = min(max(predictive_volatility, 0.0) / 0.03, 1.0)
+
+        suspicion_score = min(
+            1.0,
+            (whale_score * 0.42)
+            + (cp_prob * 0.28)
+            + (innovation_score * 0.12)
+            + (freshness_score * 0.10)
+            + (movement_score * 0.05)
+            + (volatility_score * 0.03),
+        )
+        if regime_label == "whale-watch":
+            suspicion_score = min(1.0, suspicion_score + 0.08)
+
+        is_abnormal = (
+            regime_label == "whale-watch"
+            or whale_score >= 0.14
+            or (cp_prob >= 0.18 and innovation_zscore >= 2.0)
+            or suspicion_score >= 0.26
+        )
+        if not is_abnormal:
+            continue
+
+        if pct >= 1.5:
+            bias = "pump-watch"
+            bias_label = "Nghi van pump"
+        elif pct <= -1.5:
+            bias = "dump-watch"
+            bias_label = "Nghi van dump"
+        else:
+            bias = "volatile"
+            bias_label = "Bien dong bat thuong"
+
+        reason_tags = []
+        if regime_label == "whale-watch":
+            reason_tags.append("Whale-watch")
+        if whale_score >= 0.12:
+            reason_tags.append(f"Whale {whale_score * 100:.1f}%")
+        if cp_prob >= 0.18:
+            reason_tags.append(f"CP {cp_prob * 100:.1f}%")
+        if innovation_zscore >= 2.0:
+            reason_tags.append(f"z {innovation_zscore:.1f}")
+        if abs(pct) >= 2.0:
+            reason_tags.append(f"{pct:+.2f}%")
+        if freshness_score >= 0.70:
+            reason_tags.append("Reset moi")
+        if predictive_volatility >= 0.015:
+            reason_tags.append(f"Vol {predictive_volatility * 100:.2f}%")
+
+        description = " | ".join(reason_tags[:5]) if reason_tags else "BOCPD phat hien thay doi che do giao dich"
+
+        alerts.append(
+            {
+                "symbol": symbol,
+                "market": market,
+                "price": price,
+                "change": change,
+                "pct": pct,
+                "volume": volume,
+                "cp_prob": round(cp_prob, 6),
+                "whale_score": round(whale_score, 6),
+                "innovation_zscore": round(innovation_zscore, 4),
+                "expected_run_length": round(expected_run_length, 4),
+                "map_run_length": round(map_run_length, 4),
+                "predictive_volatility": round(predictive_volatility, 8),
+                "return_value": round(return_value, 8),
+                "hazard": round(hazard, 8),
+                "evidence": round(evidence, 8),
+                "regime_label": regime_label,
+                "suspicion_score": round(suspicion_score, 6),
+                "bias": bias,
+                "bias_label": bias_label,
+                "reason_tags": reason_tags[:5],
+                "reason_text": description,
+                "event_time": row.get("event_time") or latest.get("timestamp") or daily.get("trade_date"),
+            }
+        )
+
+    alerts.sort(
+        key=lambda item: (
+            item.get("suspicion_score") or 0,
+            item.get("whale_score") or 0,
+            item.get("cp_prob") or 0,
+            abs(item.get("pct") or 0),
+        ),
+        reverse=True,
+    )
+
+    summary = {
+        "total_alerts": len(alerts),
+        "whale_watch_count": sum(1 for item in alerts if item.get("regime_label") == "whale-watch"),
+        "pump_watch_count": sum(1 for item in alerts if item.get("bias") == "pump-watch"),
+        "dump_watch_count": sum(1 for item in alerts if item.get("bias") == "dump-watch"),
+    }
+    return alerts[:limit], summary
+
+
+async def _attach_ml_forecast(alerts):
+    """
+    Enrich BOCPD abnormal alerts with ML forecast:
+    - direction up/down
+    - probability up/down
+    - expected number of sessions in that direction
+    """
+    if not alerts:
+        return alerts, {
+            "enabled": True,
+            "requested": 0,
+            "predicted": 0,
+            "up_forecast_count": 0,
+            "down_forecast_count": 0,
+        }
+
+    request_events = []
+    base_row_map = {}
+    for index, row in enumerate(alerts):
+        symbol = str(row.get("symbol") or "").upper().strip()
+        if not symbol:
+            continue
+        raw_event_time = row.get("event_time")
+        if isinstance(raw_event_time, datetime):
+            event_time_value = raw_event_time.isoformat()
+        elif isinstance(raw_event_time, date):
+            event_time_value = raw_event_time.isoformat()
+        elif raw_event_time is None:
+            event_time_value = None
+        else:
+            event_time_value = str(raw_event_time)
+        event_key = f"{symbol}|{row.get('event_time') or ''}|{index}"
+        request_events.append(
+            {
+                "event_key": event_key,
+                "symbol": symbol,
+                "event_time": event_time_value,
+                "cp_prob": row.get("cp_prob"),
+                "whale_score": row.get("whale_score"),
+                "innovation_zscore": row.get("innovation_zscore"),
+                "expected_run_length": row.get("expected_run_length"),
+                "map_run_length": row.get("map_run_length"),
+                "predictive_volatility": row.get("predictive_volatility"),
+                "return_value": row.get("return_value"),
+                "hazard": row.get("hazard"),
+                "evidence": row.get("evidence"),
+                "price": row.get("price"),
+            }
+        )
+        base_row_map[event_key] = row
+
+    if not request_events:
+        return alerts, {
+            "enabled": True,
+            "requested": len(alerts),
+            "predicted": 0,
+            "up_forecast_count": 0,
+            "down_forecast_count": 0,
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=WHALE_ML_TIMEOUT, follow_redirects=True) as client:
+            response = await client.post(
+                f"{WHALE_ML_URL}/predict-batch",
+                json={"events": request_events},
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        if payload.get("status") != "ok":
+            raise RuntimeError(payload.get("detail") or "Whale ML service returned non-ok status")
+
+        data = payload.get("data", {}) or {}
+        predictions = data.get("predictions", []) or []
+        prediction_map = {str(p.get("event_key") or ""): p for p in predictions}
+
+        enriched = []
+        up_count = 0
+        down_count = 0
+        for event in request_events:
+            key = event["event_key"]
+            base = base_row_map.get(key)
+            if base is None:
+                continue
+            row = dict(base)
+            pred = prediction_map.get(key)
+            if pred:
+                row["ml_direction"] = pred.get("direction")
+                row["ml_prob_up"] = _safe_float(pred.get("prob_up"))
+                row["ml_prob_down"] = _safe_float(pred.get("prob_down"))
+                row["ml_expected_sessions"] = round(_safe_float(pred.get("expected_sessions"), 1.0), 4)
+                row["ml_confidence"] = _safe_float(pred.get("confidence"))
+                row["ml_text"] = pred.get("text")
+                if row["ml_direction"] == "up":
+                    up_count += 1
+                elif row["ml_direction"] == "down":
+                    down_count += 1
+            enriched.append(row)
+
+        model_info = data.get("model", {}) or {}
+        summary = {
+            "enabled": True,
+            "requested": len(request_events),
+            "predicted": len(prediction_map),
+            "up_forecast_count": up_count,
+            "down_forecast_count": down_count,
+            "model_version": model_info.get("version"),
+            "trained_at": model_info.get("trained_at"),
+        }
+        return enriched, summary
+    except Exception as exc:
+        logger.warning("ML forecast enrichment skipped: %s", exc)
+        return alerts, {
+            "enabled": True,
+            "requested": len(request_events),
+            "predicted": 0,
+            "up_forecast_count": 0,
+            "down_forecast_count": 0,
+            "error": "ml_service_unavailable",
+        }
+
+
 @router.get("/system/symbols")
 async def get_system_symbols():
     """Danh sách mã cấu hình cho producer/UI."""
@@ -245,6 +673,19 @@ async def add_system_symbol(payload: AddSymbolRequest):
     except Exception as e:
         logger.error(f"add_system_symbol: {e}")
         raise HTTPException(500, detail=str(e))
+
+
+@router.post("/translate")
+async def translate_text(payload: TranslateRequest):
+    """Proxy article translation through backend to avoid browser-side CORS/rate-limit issues."""
+    try:
+        result = await _translate_via_mymemory(payload.text, payload.from_lang, payload.to_lang)
+        result["from_lang"] = payload.from_lang
+        result["to_lang"] = payload.to_lang
+        return ok(result)
+    except Exception as e:
+        logger.error(f"translate_text: {e}")
+        raise HTTPException(500, detail="Khong dich duoc bai viet luc nay")
 
 
 # ────────────────────────────── Symbols ──────────────────────────────
@@ -559,6 +1000,27 @@ async def get_daily_summary(
 # ────────────────────────────── Changepoint / BOCPD ─────────────────
 def _load_changepoint_history(symbol: str, days: int = 5, limit: int = 120):
     sym = symbol.upper()
+    try:
+        if not ch_db.is_connected():
+            ch_db.connect()
+        safe_days = max(1, int(days))
+        safe_limit = max(1, int(limit))
+        rows = ch_db.query(
+            f"""
+            SELECT *
+            FROM stock_changepoint_events
+            WHERE symbol = {_sql_quote(sym)}
+              AND event_time >= now() - INTERVAL {safe_days} DAY
+            ORDER BY event_time DESC
+            LIMIT {safe_limit}
+            """
+        )
+        rows.reverse()
+        if rows:
+            return rows
+    except Exception as exc:
+        logger.warning("ClickHouse changepoint history query failed, fallback Scylla: %s", exc)
+
     rows = []
     for offset in range(days):
         d = date.today() - timedelta(days=offset)
@@ -582,7 +1044,7 @@ def _load_changepoint_history(symbol: str, days: int = 5, limit: int = 120):
 async def get_all_changepoint_latest():
     """Trả về trạng thái changepoint mới nhất của toàn bộ mã."""
     try:
-        rows = list(db.execute("SELECT * FROM stock_changepoint_latest"))
+        rows = _load_changepoint_latest_rows()
         rows.sort(key=lambda item: item.get("whale_score") or 0, reverse=True)
         return ok(rows)
     except Exception as e:
@@ -590,17 +1052,42 @@ async def get_all_changepoint_latest():
         raise HTTPException(500, detail=str(e))
 
 
+@router.get("/changepoint/abnormal")
+async def get_abnormal_changepoint_alerts(limit: int = Query(default=16, ge=1, le=50)):
+    """Danh sách mã nghi vấn bất thường / whale-watch lấy từ module BOCPD."""
+    try:
+        latest = list(
+            db.execute(
+                "SELECT symbol, price, change, change_percent, day_volume, "
+                "exchange, last_size, market_hours, timestamp "
+                "FROM stock_latest_prices"
+            )
+        )
+        daily = list(
+            db.execute(
+                "SELECT symbol, trade_date, open, high, low, close, volume, "
+                "change, change_percent, vwap, exchange "
+                "FROM stock_daily_summary"
+            )
+        )
+        cp_rows = _load_changepoint_latest_rows()
+        alerts, summary = _build_abnormal_alerts(latest, daily, cp_rows, limit=limit)
+        alerts, ml_summary = await _attach_ml_forecast(alerts)
+        summary["ml_forecast"] = ml_summary
+        return ok({"summary": summary, "alerts": alerts})
+    except Exception as e:
+        logger.error(f"get_abnormal_changepoint_alerts: {e}")
+        raise HTTPException(500, detail=str(e))
+
+
 @router.get("/changepoint/{symbol}")
 async def get_changepoint_latest(symbol: str):
     """Trả về trạng thái changepoint mới nhất của một mã."""
     try:
-        rows = list(db.execute(
-            "SELECT * FROM stock_changepoint_latest WHERE symbol = %s",
-            [symbol.upper()],
-        ))
-        if not rows:
+        row = _load_changepoint_latest_row(symbol)
+        if not row:
             raise HTTPException(404, detail="Changepoint signal not found for symbol")
-        return ok(rows[0])
+        return ok(row)
     except HTTPException:
         raise
     except Exception as e:
@@ -734,6 +1221,7 @@ async def get_market_overview():
             "change, change_percent, vwap, exchange "
             "FROM stock_daily_summary"
         ))
+        cp_rows = _load_changepoint_latest_rows()
 
         # Merge latest + daily
         daily_map = _build_daily_map(daily)
@@ -795,6 +1283,10 @@ async def get_market_overview():
             elif p < 0:
                 decliners += 1
 
+        alerts, alert_summary = _build_abnormal_alerts(latest, daily, cp_rows, limit=50)
+        alerts, ml_summary = await _attach_ml_forecast(alerts)
+        alert_summary["ml_forecast"] = ml_summary
+
         return ok({
             "breadth": {
                 "labels": bucket_labels,
@@ -804,6 +1296,8 @@ async def get_market_overview():
                 "decliners": decliners,
             },
             "stocks": _serialise(merged),
+            "alerts": _serialise(alerts),
+            "alert_summary": _serialise(alert_summary),
         })
     except Exception as e:
         logger.error(f"get_market_overview: {e}")

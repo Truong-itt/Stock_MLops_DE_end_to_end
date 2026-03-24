@@ -1,2 +1,2 @@
 cassandra-driver
-
+clickhouse-connect

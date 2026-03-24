@@ -301,3 +301,57 @@ SELECT
 FROM stock_warehouse.stock_ohlcv_daily
 GROUP BY symbol, trade_date
 ORDER BY symbol, trade_date;
+
+-- ── 9. BOCPD / CHANGPOINT EVENTS ───────────────────────────────────
+-- Dùng làm source-of-truth cho history BOCPD phục vụ training / backtest
+CREATE TABLE IF NOT EXISTS stock_warehouse.stock_changepoint_events
+(
+    symbol                String,
+    event_time            DateTime64(3),
+    price                 Float64,
+    return_value          Float64,
+    cp_prob               Float64,
+    expected_run_length   Float64,
+    map_run_length        Int32,
+    predictive_volatility Float64,
+    innovation_zscore     Float64,
+    whale_score           Float64,
+    hazard                Float64,
+    evidence              Float64,
+    regime_label          LowCardinality(String),
+    source                LowCardinality(String),
+    inserted_at           DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(event_time)
+ORDER BY (symbol, event_time)
+TTL toDate(event_time) + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192;
+
+CREATE VIEW IF NOT EXISTS stock_warehouse.v_changepoint_latest AS
+SELECT
+    latest.symbol              AS symbol,
+    latest.event_time          AS event_time,
+    events.price               AS price,
+    events.return_value        AS return_value,
+    events.cp_prob             AS cp_prob,
+    events.expected_run_length AS expected_run_length,
+    events.map_run_length      AS map_run_length,
+    events.predictive_volatility AS predictive_volatility,
+    events.innovation_zscore   AS innovation_zscore,
+    events.whale_score         AS whale_score,
+    events.hazard              AS hazard,
+    events.evidence            AS evidence,
+    events.regime_label        AS regime_label,
+    events.source              AS source
+FROM
+(
+    SELECT
+        symbol,
+        max(event_time) AS event_time
+    FROM stock_warehouse.stock_changepoint_events
+    GROUP BY symbol
+) AS latest
+ANY INNER JOIN stock_warehouse.stock_changepoint_events AS events
+    ON events.symbol = latest.symbol
+   AND events.event_time = latest.event_time;

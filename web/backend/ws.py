@@ -190,7 +190,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         symbol = req.get("symbol", "").upper()
                         interval = req.get("interval", "1m")
                         req_date = req.get("date")
-                        from datetime import timedelta
                         rows = []
                         
                         # Map interval → query strategy

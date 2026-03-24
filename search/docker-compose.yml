@@ -8,6 +8,11 @@ services:
       - SCYLLA_CONTACT_POINTS=scylla-node1,scylla-node2,scylla-node3
       - SCYLLA_PORT=9042
       - SCYLLA_KEYSPACE=stock_data
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=truongittstock
+      - CLICKHOUSE_DB=stock_warehouse
       - SYMBOL_REGISTRY_PATH=/app/config/symbol_registry.json
       - BOCPD_HAZARD_LAMBDA=90
       - BOCPD_MAX_RUN_LENGTH=180

@@ -10,8 +10,8 @@
 ![Status](https://img.shields.io/badge/status-active%20development-brightgreen)
 
 Hệ thống xử lý dữ liệu chứng khoán **real-time** end-to-end, kết hợp Data Engineering và MLOps.
-Pipeline hiện tại: thu thập giá cổ phiếu từ Yahoo Finance WebSocket → Kafka → Flink → ClickHouse / ScyllaDB, phân tích sentiment tin tức bằng FinBERT, hiển thị qua dashboard web thời gian thực.
-**Sắp ra mắt:** dự đoán giá chứng khoán dựa trên timeseries + tin tức, với ClickHouse đóng vai trò **Data Warehouse trung tâm** cho toàn bộ pipeline MLOps.
+Pipeline hiện tại: thu thập giá từ Yahoo Finance WebSocket → Kafka → Flink → ClickHouse / ScyllaDB, phân tích sentiment bằng FinBERT, phát hiện changepoint bằng BOCPD, dự báo hậu bất thường bằng Whale ML, hiển thị realtime trên web.
+ClickHouse đóng vai trò **Data Warehouse trung tâm** cho stream analytics và pipeline MLOps.
 
 ---
 
@@ -26,7 +26,8 @@ Pipeline hiện tại: thu thập giá cổ phiếu từ Yahoo Finance WebSocket
 - [Hướng dẫn triển khai](#-hướng-dẫn-triển-khai)
 - [API Endpoints](#-api-endpoints)
 - [Schema dữ liệu](#-schema-dữ-liệu)
-- [🔮 MLOps & Dự đoán giá (Coming Soon)](#-mlops--dự-đoán-giá-coming-soon)
+- [📐 Công thức toán chính](#-công-thức-toán-chính)
+- [🤖 MLOps Whale ML (Implemented)](#-mlops-whale-ml-implemented)
 
 ---
 
@@ -66,9 +67,9 @@ Pipeline hiện tại: thu thập giá cổ phiếu từ Yahoo Finance WebSocket
 │   • Raw ticks (TTL 2 năm)      │   │   Đọc OHLCV từ ClickHouse      │
 │   • Materialized Views OHLCV   │   │   → Write ScyllaDB (60s/lần)  │
 │     1m / 5m / 1h / 3h / 6h    │   └──────────────────┬─────────────┘
-│   • Feature store cho ML (planned)  │                      │
+│   • Feature store cho Whale ML     │                      │
 └──────────────┬─────────────────┘                      │
-               │ (Coming Soon)                          │
+               │ (BOCPD + Whale ML)                     │
                ▼                                        ▼
                                      ┌────────────────────────────────┐
                                      │   ScyllaDB  (3-node cluster)   │
@@ -93,23 +94,22 @@ Pipeline hiện tại: thu thập giá cổ phiếu từ Yahoo Finance WebSocket
                                      └────────────────────────────────┘
 
           ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
-                         🔮 COMING SOON — MLOps
+                        🤖 DEPLOYED MLOps — Whale ML
           │                                                     │
-            ClickHouse (Feature Store)
-          │        │                                            │
-                   ├─ OHLCV features (1m/5m/1h/daily)
-          │        ├─ Technical indicators (RSI, MACD, BB…)    │
-                   └─ News sentiment scores (FinBERT)
+            ClickHouse changepoint_events + v_ohlcv_daily
           │               │                                     │
                           ▼
-          │   ML Training Pipeline (Airflow / MLflow)          │
-                   LSTM / XGBoost / Prophet
-          │               │                                     │
-                          ▼
-          │   Model Registry (MLflow)                          │
+          │   Train service (LogReg + RF)                      │
+          │   MLflow run + metrics + artifact                 │
                           │
           │               ▼                                     │
-              Prediction API → Dashboard (giá T+1, T+5)
+              MLflow Registry: whale_move_forecaster@production
+          │               │                                     │
+                          ▼
+          │   Web backend enrich alert: /predict-batch         │
+                          │
+          │               ▼                                     │
+              Dashboard: hướng tăng/giảm + số phiên + xác suất
           └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
 ```
 
@@ -125,7 +125,9 @@ Pipeline hiện tại: thu thập giá cổ phiếu từ Yahoo Finance WebSocket
 | 4 | ScyllaDB CDC | Backend polling | ScyllaDB `stock_latest_prices` |
 | 5 | Yahoo Finance RSS / Google News | `news_worker.py` (mỗi 5 phút) | ScyllaDB `stock_news` + Kafka `news-sentiment` |
 | 6 | Kafka `news-sentiment` | `sentiment_worker.py` (FinBERT) | ScyllaDB `stock_news.sentiment_score` |
-| 7 | ScyllaDB | FastAPI REST + WebSocket | Frontend Dashboard |
+| 7 | Scylla latest prices | `search/changepoint_worker.py` (BOCPD) | ClickHouse `stock_changepoint_events`, Scylla `stock_changepoint_latest/history` |
+| 8 | ClickHouse changepoint + daily close | `whale-ml-service` train/predict | MLflow Registry + forecast `up/down/sessions` |
+| 9 | ScyllaDB + ClickHouse + Whale ML | FastAPI REST + WebSocket | Frontend Dashboard |
 
 ---
 
@@ -153,7 +155,7 @@ Stock_MLops_DE_end_to_end/
 ├── clickhouse_service/          # ClickHouse — Data Warehouse trung tâm cho MLOps
 │   ├── docker-compose.yml
 │   └── init/
-│       └── 01_create_tables.sql # Raw ticks + Materialized Views (1m/5m/1h/3h/6h) + Feature tables (planned)
+│       └── 01_create_tables.sql # Raw ticks + Materialized Views + changepoint tables
 │
 ├── scylla_service/              # ScyllaDB NoSQL cluster
 │   ├── docker-compose.yml       # 3-node cluster + auto setup
@@ -177,6 +179,21 @@ Stock_MLops_DE_end_to_end/
 │   ├── frontend/
 │   │   └── Dockerfile
 │   └── docker-compose.yml
+│
+├── search/                      # BOCPD changepoint detection module
+│   ├── bocpd.py
+│   ├── changepoint_worker.py
+│   ├── docker-compose.yml
+│   └── README.md
+│
+├── mlops/infra/                 # MLOps stack (Airflow + MLflow + Whale ML)
+│   ├── docker-compose.yml
+│   ├── dags/whale_ml_retrain_pipeline.py
+│   ├── whale_ml/
+│   │   ├── modeling.py
+│   │   ├── service.py
+│   │   └── README.md
+│   └── README.md
 │
 ├── monitor_service/             # Observability stack
 │   ├── docker-compose.yml       # Prometheus + Grafana + cAdvisor + Loki
@@ -203,6 +220,8 @@ Stock_MLops_DE_end_to_end/
 | **Data Warehouse** | ClickHouse (Data Warehouse cho MLOps) | 24.3 (`clickhouse-server:24.3-alpine`) |
 | **NoSQL Database** | ScyllaDB | 5.4 (`scylladb/scylla:5.4`) |
 | **AI / ML** | FinBERT | `ProsusAI/finbert` (HuggingFace Transformers) |
+| **MLOps Tracking/Registry** | MLflow | 2.17.x |
+| **MLOps Orchestration** | Apache Airflow | 2.9.x |
 | **Backend API** | FastAPI + Uvicorn | Python 3.10 (`python:3.10-slim-bookworm`) |
 | **Data Workers** | Python | 3.11 (`python:3.11-slim`) |
 | **Data Source** | yfinance (Yahoo Finance WebSocket) | ≥ 0.2 |
@@ -216,18 +235,22 @@ Stock_MLops_DE_end_to_end/
 
 ## 📊 Danh sách cổ phiếu theo dõi
 
-### 🇻🇳 Cổ phiếu Việt Nam (30 mã)
+### 🇻🇳 Cổ phiếu Việt Nam (50 mã)
 ```
-VCB, BID, FPT, HPG, CTG, VHM, TCB, VPB, VNM, MBB,
-GAS, ACB, MSN, GVR, LPB, SSB, STB, VIB, MWG, HDB,
-PLX, POW, SAB, BCM, PDR, KDH, NVL, DGC, SHB, EIB
+VCB, VIC, VHM, BID, TCB, CTG, VGI, ACV, FPT, HPG,
+MBB, MSN, GVR, GAS, VNM, VPB, ACB, SSB, STB, HDB,
+SHB, LPB, VIB, MWG, BCM, PLX, SAB, POW, VJC, REE,
+GMD, TPB, VRE, VCI, SSI, HCM, DGC, PDR, KDH, NVL,
+KBC, DPM, DCM, PVD, PNJ, DHG, DIG, BVH, BSR, EIB
 ```
 
-### 🌍 Cổ phiếu Quốc tế (30 mã)
+### 🌍 Cổ phiếu Quốc tế (50 mã)
 ```
-AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, BRK-B, LLY, AVGO,
-JPM,  V,    UNH,  WMT,  MA,    XOM,  JNJ,  PG,    HD,  COST,
-NFLX, AMD,  INTC, DIS,  PYPL,  BA,   CRM,  ORCL,  CSCO, ABT
+NVDA, AAPL, GOOGL, MSFT, AMZN, META, TSLA, AVGO, TSM, BRK-B,
+WMT, LLY, JPM, TCEHY, XOM, V, JNJ, ASML, MA, NFLX,
+ORCL, COST, PG, HD, ABBV, CVX, KO, SAP, BABA, TMUS,
+PLTR, CRM, CSCO, AZN, AMD, DIS, PEP, INTC, IBM, ADBE,
+TM, SHOP, UBER, BAC, MRK, LIN, MCD, ABT, UNH, PYPL
 ```
 
 ---
@@ -245,6 +268,11 @@ NFLX, AMD,  INTC, DIS,  PYPL,  BA,   CRM,  ORCL,  CSCO, ABT
 | **ScyllaDB Node 3** | `scylla-node3` | `9044` |
 | **Flink Web UI** | `jobmanager` | `8084` |
 | **FastAPI Backend** | `backend-stock` | `8020` |
+| **Whale ML Service** | `whale-ml-service` | `8090` |
+| **MLflow** | `student_mlflow` | `5000` |
+| **Airflow Webserver** | `student_airflow_webserver` | `8080` |
+| **Gradio** | `student_gradio` | `7860` |
+| **MinIO API/Console** | `student_minio` | `9100` / `9101` |
 | **Prometheus** | `prometheus` | `9090` |
 | **Grafana** | `grafana` | `3000` |
 | **cAdvisor** | `cadvisor` | `8090` |
@@ -335,7 +363,28 @@ docker compose up -d
 
 > Dashboard: http://localhost:8020
 
-### Bước 8 — Khởi động Monitoring (tùy chọn)
+### Bước 8 — Khởi động BOCPD Search Module
+
+```bash
+cd search
+docker compose up -d
+```
+
+### Bước 9 — Khởi động MLOps Infra (MLflow + Airflow + Whale ML)
+
+```bash
+cd mlops/infra
+docker compose up -d --build
+```
+
+| URL | Service |
+|-----|---------|
+| http://localhost:5000 | MLflow |
+| http://localhost:8080 | Airflow |
+| http://localhost:8090 | Whale ML API |
+| http://localhost:7860 | Gradio |
+
+### Bước 10 — Khởi động Monitoring (tùy chọn)
 
 ```bash
 cd monitor_service
@@ -348,7 +397,7 @@ docker compose up -d
 | http://localhost:9090 | Prometheus |
 | http://localhost:8090 | cAdvisor |
 
-### Bước 9 — Khởi động Management UI (tùy chọn)
+### Bước 11 — Khởi động Management UI (tùy chọn)
 
 ```bash
 cd gui
@@ -368,11 +417,17 @@ Base URL: `http://localhost:8020/api`
 
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| `GET` | `/symbols` | Danh sách tất cả mã cổ phiếu |
 | `GET` | `/stocks/latest` | Giá mới nhất của tất cả cổ phiếu |
 | `GET` | `/stocks/{symbol}` | Thông tin chi tiết một cổ phiếu |
-| `GET` | `/stocks/{symbol}/ohlcv` | Dữ liệu OHLCV theo interval |
-| `GET` | `/stocks/{symbol}/news` | Tin tức và sentiment của cổ phiếu |
+| `GET` | `/stocks/ohlcv/{symbol}` | Dữ liệu OHLCV theo interval |
+| `GET` | `/news/{symbol}` | Tin tức và sentiment theo mã |
+| `GET` | `/market/overview` | Tổng quan thị trường + alert BOCPD + ML forecast |
+| `GET` | `/changepoint/latest` | Snapshot BOCPD mới nhất toàn bộ mã |
+| `GET` | `/changepoint/abnormal` | Danh sách mã bất thường đã enrich ML forecast |
+| `GET` | `/changepoint/{symbol}` | Trạng thái BOCPD mới nhất theo mã |
+| `GET` | `/changepoint/{symbol}/history` | Lịch sử r_t và cp_prob theo mã |
+| `GET` | `/system/symbols` | Danh sách mã cấu hình hệ thống |
+| `POST` | `/system/symbols` | Thêm mã mới + mở rộng partition nếu cần |
 | `WS` | `/ws` | WebSocket realtime price stream |
 
 ---
@@ -391,7 +446,7 @@ Base URL: `http://localhost:8020/api`
 
 ### ClickHouse — Database `stock_warehouse` (Data Warehouse & Feature Store)
 
-> **Mục đích chính:** ClickHouse không chỉ là OLAP engine — đây là **Data Warehouse trung tâm** lưu trữ toàn bộ lịch sử giá, OHLCV aggregated và (sắp tới) feature vectors cho pipeline MLOps dự đoán giá.
+> **Mục đích chính:** ClickHouse là **Data Warehouse trung tâm** cho lịch sử giá, OHLCV, changepoint events và dữ liệu train ML.
 
 | Table / View | Mô tả |
 |-------------|-------|
@@ -400,8 +455,9 @@ Base URL: `http://localhost:8020/api`
 | `mv_ohlcv_5m` → `stock_ohlcv_5m` | Materialized View OHLCV 5 phút |
 | `mv_ohlcv_1h` → `stock_ohlcv_1h` | Materialized View OHLCV 1 giờ |
 | `v_ohlcv_3h`, `v_ohlcv_6h` | Views OHLCV 3h / 6h |
-| `stock_features` *(planned)* | Feature store: technical indicators + sentiment scores |
-| `ml_predictions` *(planned)* | Kết quả dự đoán giá từ ML models |
+| `stock_changepoint_events` | Event stream BOCPD (source-of-truth cho train/backtest) |
+| `v_changepoint_latest` | Snapshot BOCPD mới nhất theo mã |
+| `v_ohlcv_daily` | Daily close phục vụ gắn nhãn Whale ML |
 
 ### Kafka Topics
 
@@ -431,98 +487,101 @@ Dự án sử dụng **[FinBERT](https://huggingface.co/ProsusAI/finbert)** — 
 
 ---
 
-## 🔮 MLOps & Dự đoán giá (Coming Soon)
+## 📐 Công thức toán chính
 
-> ⚠️ **Phần này đang trong kế hoạch phát triển** — chưa được implemented nhưng sẽ có trong thời gian tới.
+### BOCPD (module `search/`)
 
-### Mục tiêu
+- Return đầu vào:
 
-Sử dụng **ClickHouse** làm Data Warehouse trung tâm để xây dựng pipeline MLOps hoàn chỉnh: **dự đoán giá chứng khoán** dựa trên:
-- **Dữ liệu timeseries** — giá OHLCV lịch sử theo nhiều granularity (1m / 5m / 1h / daily)
-- **Tin tức + Sentiment** — điểm sentiment từ FinBERT cho từng mã chứng khoán
+$$
+R_t=\frac{p_t}{p_{t-1}}-1
+$$
 
-### Kiến trúc MLOps dự kiến
+- Hazard hằng số:
 
-```
-ClickHouse (Data Warehouse)
-        │
-        ├─── stock_ticks          ──┐
-        ├─── stock_ohlcv_1m/5m/1h  ├──▶  Feature Engineering
-        └─── stock_news_sentiment  ──┘         │
-                                               ▼
-                                   ┌─────────────────────┐
-                                   │  stock_features     │  ← bảng CH planned
-                                   │  (Technical + NLP)  │
-                                   └──────────┬──────────┘
-                                              │
-                                              ▼
-                                   ┌─────────────────────┐
-                                   │  ML Training        │
-                                   │  (Airflow Pipeline) │
-                                   └──────────┬──────────┘
-                                              │
-                              ┌───────────────┼────────────────┐
-                              ▼               ▼                ▼
-                         LSTM/GRU        XGBoost /        Prophet
-                         (Deep TS)       LightGBM         (Trend)
-                              │               │                │
-                              └───────────────┼────────────────┘
-                                              │  Ensemble
-                                              ▼
-                                   ┌─────────────────────┐
-                                   │  MLflow Model       │
-                                   │  Registry           │
-                                   └──────────┬──────────┘
-                                              │
-                                              ▼
-                                   ┌─────────────────────┐
-                                   │  Prediction API     │  ← FastAPI endpoint
-                                   │  /predict/{symbol}  │
-                                   └──────────┬──────────┘
-                                              │
-                                              ▼
-                                   Dashboard (giá T+1, T+5, T+30)
-```
+$$
+H(\tau)=\frac{1}{\lambda_{\text{gap}}}
+$$
 
-### Features dự kiến
+- Posterior run-length (chuẩn hóa từ growth/cp joint):
 
-#### 📐 Technical Indicators (từ OHLCV trong ClickHouse)
-| Feature | Mô tả |
-|---------|-------|
-| RSI (14) | Relative Strength Index |
-| MACD | Moving Average Convergence Divergence |
-| Bollinger Bands | Upper / Middle / Lower bands |
-| EMA (9, 21, 50, 200) | Exponential Moving Averages |
-| ATR | Average True Range (volatility) |
-| OBV | On-Balance Volume |
-| VWAP | Volume-Weighted Average Price |
+$$
+P(r_t \mid x_{1:t}) \propto P(r_t, x_{1:t})
+$$
 
-#### 📰 NLP Features (từ FinBERT Sentiment)
-| Feature | Mô tả |
-|---------|-------|
-| `sentiment_score_avg_1d` | Trung bình sentiment score 1 ngày gần nhất |
-| `sentiment_score_avg_7d` | Trung bình sentiment score 7 ngày |
-| `news_volume_1d` | Số lượng tin tức trong 1 ngày |
-| `positive_ratio_7d` | Tỷ lệ tin tích cực 7 ngày |
+- Sufficient statistics update (zero-mean Gaussian variance model):
 
-### Công nghệ dự kiến
+$$
+\alpha'=\alpha+\frac12,\quad \beta'=\beta+\frac{x_t^2}{2}
+$$
 
-| Layer | Công nghệ |
-|-------|-----------|
-| **Workflow Orchestration** | Apache Airflow |
-| **Experiment Tracking** | MLflow |
-| **Time-Series Models** | LSTM / GRU (PyTorch), Prophet |
-| **Gradient Boosting** | XGBoost / LightGBM |
-| **Feature Store** | ClickHouse (`stock_features` table) |
-| **Model Serving** | FastAPI + MLflow model loading |
+Chi tiết đầy đủ (kèm mapping công thức (1)-(14)) xem:
 
-### Endpoints dự kiến
+- `search/README.md`
 
-| Method | Endpoint | Mô tả |
-|--------|----------|-------|
-| `GET` | `/api/predict/{symbol}` | Dự đoán giá T+1 / T+5 / T+30 |
-| `GET` | `/api/predict/{symbol}/history` | Lịch sử dự đoán vs thực tế |
-| `GET` | `/api/models` | Danh sách models đã train và metrics |
+### Whale ML (module `mlops/infra/whale_ml`)
+
+- Nhãn hướng phiên kế tiếp:
+
+$$
+y_{\text{dir}}=\mathbf{1}[R_{d+1}\ge 0]
+$$
+
+- Nhãn số phiên liên tiếp cùng hướng trong horizon `H`:
+
+$$
+y_{\text{sess}}=\min(H,\text{consecutive same-sign sessions})
+$$
+
+- Xác suất hướng từ Logistic Regression:
+
+$$
+P(\text{up}\mid x)=\sigma(w^\top x+b),\quad P(\text{down})=1-P(\text{up})
+$$
+
+- Số phiên dự báo từ RandomForestRegressor:
+
+$$
+\hat{s}=f_{\text{RF}}(x),\quad \hat{s}\in[1,H]
+$$
+
+Chi tiết đầy đủ xem:
+
+- `mlops/infra/whale_ml/README.md`
+
+---
+
+## 🤖 MLOps Whale ML (Implemented)
+
+### Luồng đã chạy thật trong hệ thống
+
+1. Dữ liệu train lấy từ ClickHouse:
+   - `stock_changepoint_events`
+   - `v_ohlcv_daily`
+2. Whale ML train classifier + regressor.
+3. Log MLflow run: params, metrics, artifacts.
+4. Register model vào MLflow Registry:
+   - model name: `whale_move_forecaster`
+   - alias serving: `production`
+5. Airflow DAG điều phối retrain:
+   - `whale_ml_retrain_pipeline`
+   - chuẩn `dag_run.conf`: `lookback_days`, `max_rows`, `horizon`, `timeout_seconds`
+6. Web backend gọi `predict-batch` để enrich alert BOCPD.
+7. Frontend hiển thị: hướng dự báo, xác suất lên/xuống, số phiên kỳ vọng.
+
+### API của Whale ML service
+
+- `GET /health`
+- `GET /model/info`
+- `POST /train`
+- `POST /predict-event`
+- `POST /predict-batch`
+
+### Tài liệu MLOps chi tiết
+
+- `mlops/infra/README.md`
+- `mlops/infra/whale_ml/README.md`
+- `mlops/infra/dags/whale_ml_retrain_pipeline.py`
 
 ---
 
@@ -554,6 +613,22 @@ aiokafka, confluent-kafka
 websockets
 ```
 
+### Whale ML (`mlops/infra/whale_ml/requirements.txt`)
+```
+fastapi, uvicorn
+clickhouse-connect
+pandas, numpy, scikit-learn
+joblib
+mlflow
+boto3
+```
+
+### Airflow image (`mlops/infra/airflow/Dockerfile`)
+```
+apache/airflow:2.9.3-python3.10
+psycopg2-binary
+```
+
 ---
 
 ## 📝 Ghi chú
@@ -561,7 +636,7 @@ websockets
 - **Network**: Tất cả services dùng chung Docker network `stock-network` (external).
 - **FinBERT** được pre-download vào Docker image để tăng tốc startup; model cache được mount volume để tránh download lại.
 - **ScyllaDB CDC** được bật trên `stock_prices` và `stock_latest_prices` để hỗ trợ change data capture.
-- **ClickHouse** sử dụng `AggregatingMergeTree` + Materialized Views để tính OHLCV real-time, và sẽ được mở rộng thành **Feature Store** cho pipeline dự đoán giá ML (coming soon).
+- **ClickHouse** lưu cả dữ liệu stream và BOCPD events để phục vụ trực tiếp pipeline Whale ML.
 - Dữ liệu trong ClickHouse có **TTL 2 năm** tự động xoá.
 
 ---
@@ -569,4 +644,3 @@ websockets
 ## 🙏 Tác giả
 
 **Truong-itt** — [GitHub](https://github.com/Truong-itt)
-

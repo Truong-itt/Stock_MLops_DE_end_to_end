@@ -20,6 +20,9 @@ let sectorFilter = "";         // current sector filter
 let marketFilter = "";         // "" = all, "vn" = Vietnam, "world" = International
 let symbolConfig = { vn: [], world: [] };
 let cpSignals   = {};          // keyed by symbol, latest BOCPD state
+let cpAlerts    = [];          // enriched abnormal/whale alerts from backend
+let cpAlertMap  = {};          // keyed by symbol, best abnormal alert per symbol
+let cpAlertSummary = null;     // summary payload from /changepoint/abnormal or /market/overview
 
 // ─── Stock lists for market filter ─────────────────────────
 let VN_STOCKS = new Set();
@@ -196,6 +199,76 @@ const fmtV = v => {if(v==null)return"--";if(v>=1e9)return(v/1e9).toFixed(2)+"B";
 const fmtProb = n => n==null||isNaN(n)?"--":`${(Number(n)*100).toFixed(2)}%`;
 const cls = v => v>0?"up":v<0?"down":"flat";
 
+function _normSym(value){
+  return String(value || "").trim().toUpperCase();
+}
+
+function _mlDirectionMeta(direction){
+  const d = String(direction || "").toLowerCase();
+  if(d === "up") return { key: "up", label: "Tang", klass: "up" };
+  if(d === "down") return { key: "down", label: "Giam", klass: "down" };
+  return { key: "flat", label: "Trung tinh", klass: "flat" };
+}
+
+function _bestAlertPerSymbol(alerts){
+  const map = {};
+  (alerts || []).forEach(row => {
+    const sym = _normSym(row?.symbol);
+    if(!sym) return;
+    const prev = map[sym];
+    if(!prev){
+      map[sym] = row;
+      return;
+    }
+    const rowScore = Number(row?.suspicion_score || 0);
+    const prevScore = Number(prev?.suspicion_score || 0);
+    if(rowScore > prevScore){
+      map[sym] = row;
+      return;
+    }
+    if(rowScore === prevScore && Number(row?.cp_prob || 0) > Number(prev?.cp_prob || 0)){
+      map[sym] = row;
+    }
+  });
+  return map;
+}
+
+function _hasMlForecast(row){
+  if(!row) return false;
+  return (
+    row.ml_direction != null ||
+    row.ml_prob_up != null ||
+    row.ml_prob_down != null ||
+    row.ml_expected_sessions != null
+  );
+}
+
+function _mlForecastView(row){
+  if(!_hasMlForecast(row)) return null;
+  const meta = _mlDirectionMeta(row.ml_direction);
+  const probUp = Number(row.ml_prob_up || 0);
+  const probDown = Number(row.ml_prob_down || 0);
+  const expectedRaw = Number(row.ml_expected_sessions);
+  const expectedSessions = Number.isFinite(expectedRaw) && expectedRaw > 0 ? expectedRaw : 0;
+  const expectedText = expectedSessions > 0 ? `${fmt(expectedSessions, 1)} phien` : "--";
+  const text = row.ml_text || `Du kien ${expectedText} ${meta.label.toLowerCase()}`;
+  return {
+    ...meta,
+    directionLabel: meta.label,
+    probUp,
+    probDown,
+    expectedSessions,
+    expectedText,
+    text,
+  };
+}
+
+function getSymbolMlForecast(symbol){
+  const sym = _normSym(symbol);
+  if(!sym) return null;
+  return _mlForecastView(cpAlertMap[sym]);
+}
+
 function parseChartTime(value){
   if(value == null || value === "") return null;
   if(value instanceof Date) return isNaN(value) ? null : value;
@@ -286,14 +359,34 @@ function ingestChangepoint(rows){
   if(wlStocks.length) renderWatchlistSignalChart(wlStocks);
 }
 
+function ingestChangepointAlerts(payload){
+  const envelope = Array.isArray(payload) ? { alerts: payload } : (payload || {});
+  const alerts = Array.isArray(envelope.alerts) ? envelope.alerts : [];
+  cpAlerts = alerts;
+  cpAlertMap = _bestAlertPerSymbol(cpAlerts);
+  cpAlertSummary = envelope.summary || envelope.alert_summary || null;
+  if(Object.keys(stocks).length) renderTable();
+  if(selected && cpSignals[selected]){
+    renderChangepointInfo(cpSignals[selected], selected);
+  }
+  if(_ovData) renderOverviewAbnormalBoard();
+}
+
 async function loadChangepointSummary(silent=true){
   try{
-    const resp = await fetch(`${API}/api/changepoint/latest`);
-    const json = await resp.json();
-    if(resp.ok && json.status === "ok"){
-      ingestChangepoint(json.data || []);
+    const [respLatest, respAbnormal] = await Promise.all([
+      fetch(`${API}/api/changepoint/latest`),
+      fetch(`${API}/api/changepoint/abnormal?limit=50`),
+    ]);
+    const jsonLatest = await respLatest.json();
+    const jsonAbnormal = await respAbnormal.json();
+    if(respLatest.ok && jsonLatest.status === "ok"){
+      ingestChangepoint(jsonLatest.data || []);
+      if(respAbnormal.ok && jsonAbnormal.status === "ok"){
+        ingestChangepointAlerts(jsonAbnormal.data || {});
+      }
     }else if(!silent){
-      throw new Error(json.detail || "Khong tai duoc BOCPD summary");
+      throw new Error(jsonLatest.detail || "Khong tai duoc BOCPD summary");
     }
   }catch(err){
     console.error("loadChangepointSummary error:", err);
@@ -342,10 +435,11 @@ async function resyncData(showToast=true){
       el.syncBtn.disabled = true;
       el.syncBtn.textContent = "Dang dong bo...";
     }
-    const [registryResp, latestResp, cpResp] = await Promise.all([
+    const [registryResp, latestResp, cpResp, cpAlertResp] = await Promise.all([
       loadSymbolRegistry(),
       fetch(`${API}/api/stocks/latest`).then(r=>r.json()),
       fetch(`${API}/api/changepoint/latest`).then(r=>r.json()).catch(()=>({status:"err"})),
+      fetch(`${API}/api/changepoint/abnormal?limit=50`).then(r=>r.json()).catch(()=>({status:"err"})),
     ]);
     if(latestResp.status === "ok"){
       ingest(latestResp.data || [], true);
@@ -354,6 +448,9 @@ async function resyncData(showToast=true){
     }
     if(cpResp.status === "ok"){
       ingestChangepoint(cpResp.data || []);
+    }
+    if(cpAlertResp.status === "ok"){
+      ingestChangepointAlerts(cpAlertResp.data || {});
     }
     if(document.querySelector(".tab.active")?.dataset.tab === "news"){
       loadAllNews();
@@ -547,8 +644,12 @@ function renderTable(changed){
       : cp.regime_label === "whale-watch" ? "Whale"
       : cp.regime_label === "transition" ? "Transition"
       : "Stable";
+    const ml = getSymbolMlForecast(s.symbol);
+    const mlMeta = ml
+      ? ` | ML: ${ml.directionLabel} ${ml.expectedText} | up ${fmtProb(ml.probUp)} down ${fmtProb(ml.probDown)}`
+      : "";
     const cpTitle = cp
-      ? `CP prob: ${fmtProb(cp.cp_prob)} | E[r_t]: ${fmt(cp.expected_run_length, 2)} | MAP r_t: ${fmt(cp.map_run_length, 0)}`
+      ? `CP prob: ${fmtProb(cp.cp_prob)} | E[r_t]: ${fmt(cp.expected_run_length, 2)} | MAP r_t: ${fmt(cp.map_run_length, 0)}${mlMeta}`
       : "Chua co du lieu BOCPD";
     // Cell-level flash: only highlight specific cells that changed
     let priceFlash="",changeFlash="",pctFlash="",openFlash="",highFlash="",lowFlash="",volFlash="",vwapFlash="";
@@ -583,6 +684,9 @@ function renderTable(changed){
         <div class="cp-table" title="${cpTitle}">
           <span class="cp-pill ${cpClass}">${cpLabel}</span>
           <span class="cp-pill-meta">${cp ? fmtProb(cp.cp_prob) : '--'}</span>
+          <span class="cp-pill-ml ${ml ? ml.klass : ''}">
+            ${ml ? `ML ${ml.directionLabel} ${ml.expectedText}` : 'ML --'}
+          </span>
         </div>
       </td>
       <td class="num ${openFlash}" onclick="openDrawer('${s.symbol}')">${fmt(s.open)}</td>
@@ -741,9 +845,9 @@ async function loadChangepoint(sym){
 
     if(latestResp.ok && latestJson.status === "ok"){
       cpSignals[sym] = latestJson.data;
-      renderChangepointInfo(latestJson.data);
+      renderChangepointInfo(latestJson.data, sym);
     } else {
-      renderChangepointInfo(null);
+      renderChangepointInfo(null, sym);
     }
 
     if(historyResp.ok && historyJson.status === "ok"){
@@ -753,12 +857,12 @@ async function loadChangepoint(sym){
     }
   }catch(err){
     console.error("loadChangepoint error:", err);
-    renderChangepointInfo(null);
+    renderChangepointInfo(null, sym);
     renderChangepointChart([], sym);
   }
 }
 
-function renderChangepointInfo(data){
+function renderChangepointInfo(data, symbol=selected){
   if(!el.drCpInfo) return;
   if(!data){
     el.drCpInfo.innerHTML = '<div class="cp-empty">Chua co du lieu BOCPD cho ma nay.</div>';
@@ -779,6 +883,14 @@ function renderChangepointInfo(data){
     {label:'Whale Score', value: fmtProb(data.whale_score), klass: whaleClass},
     {label:'Regime', value: data.regime_label || '--', klass: data.regime_label === 'whale-watch' ? 'up' : data.regime_label === 'transition' ? 'flat' : 'down'},
   ];
+
+  const ml = getSymbolMlForecast(symbol);
+  if(ml){
+    cards.push({label:'ML Dir', value: ml.directionLabel, klass: ml.klass});
+    cards.push({label:'ML Session', value: ml.expectedText, klass: 'flat'});
+    cards.push({label:'ML P(up)', value: fmtProb(ml.probUp), klass: 'up'});
+    cards.push({label:'ML P(down)', value: fmtProb(ml.probDown), klass: 'down'});
+  }
 
   el.drCpInfo.innerHTML = cards.map(card => `
     <div class="cp-card">
@@ -1255,6 +1367,7 @@ function _refreshAllOverview(){
     renderTopTable();
     renderVolumeTop10Chart();
     renderOverviewSignalChart();
+    renderOverviewAbnormalBoard();
   }
   if(_sentData) renderSentimentChart(_sentData);
 }
@@ -1284,10 +1397,14 @@ async function loadMarketOverview(){
     const jSent = await rSent.json();
     if(jOv.status==="ok"){
       _ovData = jOv.data;
+      if(jOv.data?.alerts){
+        ingestChangepointAlerts(jOv.data);
+      }
       renderBreadthChart(jOv.data.breadth);
       renderTopTable();
       renderVolumeTop10Chart();
       renderOverviewSignalChart();
+      renderOverviewAbnormalBoard();
     }
     if(jSent.status==="ok"){
       _sentData = jSent.data;
@@ -1795,6 +1912,91 @@ function renderOverviewSignalChart(){
   });
 }
 
+function renderOverviewAbnormalBoard(){
+  const container = document.getElementById('ovSignalAlerts');
+  const countEl = document.getElementById('ovAlertCount');
+  if(!container) return;
+
+  const rows = (cpAlerts || [])
+    .filter(row => _ovMatchesMarket(row.symbol))
+    .slice(0, 8);
+
+  if(countEl){
+    const mlSummary = cpAlertSummary?.ml_forecast || null;
+    if(!rows.length){
+      countEl.textContent = 'Khong co canh bao';
+    }else if(mlSummary && Number(mlSummary.predicted || 0) > 0){
+      countEl.textContent = `${rows.length} ma can theo doi · ML ${mlSummary.up_forecast_count || 0} tang / ${mlSummary.down_forecast_count || 0} giam`;
+    }else{
+      countEl.textContent = `${rows.length} ma can theo doi`;
+    }
+  }
+
+  if(!rows.length){
+    container.innerHTML = `
+      <div class="ov-alert-empty">
+        <strong>Chua thay dau hieu bat thuong ro rang</strong>
+        <span>Module search va ML forecast dang theo doi lien tuc cp_prob, whale_score, r_t va huong gia sau bat thuong.</span>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = rows.map((row, idx) => {
+    const biasClass =
+      row.bias === 'pump-watch' ? 'pump'
+      : row.bias === 'dump-watch' ? 'dump'
+      : 'volatile';
+    const regimeClass =
+      row.regime_label === 'whale-watch' ? 'up'
+      : row.regime_label === 'transition' ? 'flat'
+      : 'down';
+    const pctClass = cls(Number(row.pct || 0));
+    const mlDirection = String(row.ml_direction || '').toLowerCase();
+    const mlClass = mlDirection === 'up' ? 'up' : mlDirection === 'down' ? 'down' : 'flat';
+    const mlDirectionLabel = mlDirection === 'up' ? 'Tang'
+      : mlDirection === 'down' ? 'Giam'
+      : 'Chua ro';
+    const mlProbUp = Number(row.ml_prob_up || 0);
+    const mlProbDown = Number(row.ml_prob_down || 0);
+    const mlExpectedSessions = Number(row.ml_expected_sessions || 0);
+    const mlExpectedText = mlExpectedSessions > 0 ? `${fmt(mlExpectedSessions, 1)} phien` : '--';
+    const mlText = row.ml_text || `Du kien ${mlExpectedText} ${mlDirectionLabel.toLowerCase()}`;
+    const tags = Array.isArray(row.reason_tags) ? row.reason_tags : [];
+    return `
+      <button class="ov-alert-card ${biasClass}" onclick="openDrawer('${row.symbol}')">
+        <div class="ov-alert-rank">${idx + 1}</div>
+        <div class="ov-alert-main">
+          <div class="ov-alert-topline">
+            <span class="ov-alert-symbol">${row.symbol}</span>
+            <span class="ov-alert-company">${getCompanyName(row.symbol)}</span>
+            <span class="cp-pill ${regimeClass}">${row.regime_label || 'watch'}</span>
+          </div>
+          <div class="ov-alert-meta">
+            <span class="ov-alert-bias ${biasClass}">${row.bias_label || 'Bien dong bat thuong'}</span>
+            <span class="ov-alert-pct ${pctClass}">${Number(row.pct || 0) >= 0 ? '+' : ''}${fmt(Number(row.pct || 0))}%</span>
+            <span class="ov-alert-time">${fmtDT(row.event_time)}</span>
+          </div>
+          <div class="ov-alert-tags">
+            ${tags.map(tag => `<span class="ov-alert-tag">${tag}</span>`).join('')}
+          </div>
+          <div class="ov-alert-reason">${row.reason_text || 'BOCPD dang danh dau thay doi che do giao dich'}</div>
+          <div class="ov-alert-ml ${mlClass}">ML forecast: ${mlText}</div>
+        </div>
+        <div class="ov-alert-side">
+          <div class="ov-alert-score">${Math.round(Number(row.suspicion_score || 0) * 100)}</div>
+          <div class="ov-alert-score-label">Diem nghi van</div>
+          <div class="ov-alert-metric">ML ${mlDirectionLabel} ~ ${mlExpectedText}</div>
+          <div class="ov-alert-metric">ML ↑ ${fmtProb(mlProbUp)} ↓ ${fmtProb(mlProbDown)}</div>
+          <div class="ov-alert-metric">Whale ${fmtProb(row.whale_score)}</div>
+          <div class="ov-alert-metric">CP ${fmtProb(row.cp_prob)}</div>
+          <div class="ov-alert-metric">r_t ${fmt(Number(row.expected_run_length || 0), 1)}</div>
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
 /* Theme toggle is defined inline in index.html <head> for reliability */
 
 /* ═══════════════════════════════════════════════════════════
@@ -1831,6 +2033,7 @@ function loadWatchlist(){
     const cp = cpSignals[sym] || null;
     const cpClass = !cp ? 'unknown' : cp.regime_label === 'whale-watch' ? 'up' : cp.regime_label === 'transition' ? 'flat' : 'down';
     const cpLabel = !cp ? 'Chua co' : cp.regime_label === 'whale-watch' ? 'Whale' : cp.regime_label === 'transition' ? 'Transition' : 'Stable';
+    const ml = getSymbolMlForecast(sym);
     return `<div class="wl-stock-card" onclick="openDrawer('${sym}')">
       <div class="wl-card-top">
         <div>
@@ -1850,6 +2053,9 @@ function loadWatchlist(){
       <div class="wl-card-signal">
         <span class="cp-pill ${cpClass}">${cpLabel}</span>
         <span class="wl-card-mono">${cp ? `CP ${fmtProb(cp.cp_prob)} · r ${fmt(cp.expected_run_length,1)}` : 'BOCPD --'}</span>
+      </div>
+      <div class="wl-card-mono wl-card-ml ${ml ? ml.klass : ''}">
+        ${ml ? `ML ${ml.directionLabel} ${ml.expectedText} · up ${fmtProb(ml.probUp)} / down ${fmtProb(ml.probDown)}` : 'ML --'}
       </div>
       <div class="wl-card-stats">
         <div class="wl-stat-item">
@@ -1995,13 +2201,14 @@ function renderWatchlistSignalChart(symbols){
       run_length: Number(item.signal.expected_run_length || 0),
       whale_score: Number(item.signal.whale_score || 0) * 100,
       regime_label: item.signal.regime_label || 'stable',
+      ml: getSymbolMlForecast(item.symbol),
     }));
 
   if(legendEl){
     legendEl.innerHTML = rows.length
       ? rows.map(row => `<div class="wl-legend-item">
           <span class="cp-pill ${row.regime_label==='whale-watch'?'up':row.regime_label==='transition'?'flat':'down'}">${row.symbol}</span>
-          <span>CP ${row.cp_prob.toFixed(2)}% · r ${row.run_length.toFixed(1)}</span>
+          <span>CP ${row.cp_prob.toFixed(2)}% · r ${row.run_length.toFixed(1)}${row.ml ? ` · ML ${row.ml.directionLabel} ${row.ml.expectedText}` : ''}</span>
         </div>`).join('')
       : '<span class="muted">Chưa có tín hiệu BOCPD cho watchlist.</span>';
   }
@@ -2249,42 +2456,26 @@ let originalNewsTitle = '';
 
 async function translateText(text, fromLang, toLang) {
   if (!text || fromLang === toLang) return text;
-  
-  // Split text into chunks (API has 500 char limit per request)
-  const chunks = [];
-  const maxLen = 450;
-  let remaining = text;
-  while (remaining.length > 0) {
-    if (remaining.length <= maxLen) {
-      chunks.push(remaining);
-      break;
+
+  try{
+    const resp = await fetch(`${API}/api/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        from_lang: fromLang,
+        to_lang: toLang,
+      }),
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(resp.ok && data.status === 'ok'){
+      return data.data?.translated_text || text;
     }
-    // Find a good break point
-    let breakPoint = remaining.lastIndexOf('. ', maxLen);
-    if (breakPoint < 100) breakPoint = remaining.lastIndexOf(' ', maxLen);
-    if (breakPoint < 100) breakPoint = maxLen;
-    chunks.push(remaining.slice(0, breakPoint + 1));
-    remaining = remaining.slice(breakPoint + 1);
+    throw new Error(data.detail || 'Translation API error');
+  }catch(e){
+    console.error('Translation error:', e);
+    throw e;
   }
-  
-  // Translate each chunk
-  const translated = [];
-  for (const chunk of chunks) {
-    try {
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${fromLang}|${toLang}`;
-      const resp = await fetch(url);
-      const data = await resp.json();
-      if (data.responseStatus === 200 && data.responseData?.translatedText) {
-        translated.push(data.responseData.translatedText);
-      } else {
-        translated.push(chunk); // fallback to original
-      }
-    } catch (e) {
-      console.error('Translation error:', e);
-      translated.push(chunk);
-    }
-  }
-  return translated.join(' ');
 }
 
 // Translate button handler
@@ -2324,7 +2515,7 @@ document.getElementById('nmTranslateBtn')?.addEventListener('click', async funct
     if (resetBtn) resetBtn.style.display = '';
   } catch (e) {
     console.error('Translation failed:', e);
-    alert('Dịch không thành công');
+    toast('Dich khong thanh cong', 'err');
   } finally {
     btn.classList.remove('nm-translating');
     btn.disabled = false;

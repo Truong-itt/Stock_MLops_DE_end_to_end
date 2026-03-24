@@ -12,6 +12,7 @@ Usage (Docker):
 """
 
 import asyncio
+import os
 import signal
 import time
 from datetime import datetime, timezone
@@ -33,6 +34,10 @@ from confluent_kafka.schema_registry.avro import AvroSerializer
 # CONFIG
 BOOTSTRAP_SERVERS = "kafka-1:29092"
 SCHEMA_REGISTRY_URL = "http://schema-registry:8081"
+WS_STALE_TIMEOUT_SEC = float(os.getenv("YF_WS_STALE_TIMEOUT_SEC", "90"))
+WS_RECONNECT_BASE_DELAY_SEC = float(os.getenv("YF_WS_RECONNECT_BASE_DELAY_SEC", "3"))
+WS_RECONNECT_MAX_DELAY_SEC = float(os.getenv("YF_WS_RECONNECT_MAX_DELAY_SEC", "60"))
+WS_REGISTRY_SYNC_INTERVAL_SEC = float(os.getenv("YF_WS_SYNC_INTERVAL_SEC", "10"))
 
 AVRO_SCHEMA_STR = """
 {
@@ -132,13 +137,15 @@ async def run(bootstrap: str, schema_registry_url: str):
 
     sent = 0
     skipped = 0
+    last_message_at = time.monotonic()
 
     def delivery_report(err, msg):
         if err is not None:
             logger.error("Delivery failed: %s", err)
 
     def on_message(raw: Dict[str, Any]):
-        nonlocal sent, skipped
+        nonlocal sent, skipped, last_message_at
+        last_message_at = time.monotonic()
 
         # ── Log ngay khi nhận được message từ WebSocket ──
         raw_id = raw.get("id", "?")
@@ -194,9 +201,7 @@ async def run(bootstrap: str, schema_registry_url: str):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _signal_handler)
 
-    subscribed_symbols: Set[str] = set()
-
-    async def sync_subscriptions(ws):
+    async def sync_subscriptions(ws, subscribed_symbols: Set[str]):
         while not stop_event.is_set():
             try:
                 registry.reload_if_changed()
@@ -212,36 +217,104 @@ async def run(bootstrap: str, schema_registry_url: str):
                     )
             except Exception as e:
                 logger.warning("Registry sync error: %s", e)
-            await asyncio.sleep(10)
+            await asyncio.sleep(WS_REGISTRY_SYNC_INTERVAL_SEC)
 
-    initial_symbols = registry.get_all_symbols()
-    logger.info("Connecting to Yahoo Finance WebSocket ...")
-    logger.info("Subscribing to %d symbols from registry", len(initial_symbols))
+    async def watch_connection(reconnect_event: asyncio.Event):
+        while not stop_event.is_set():
+            idle_for = time.monotonic() - last_message_at
+            if idle_for >= WS_STALE_TIMEOUT_SEC:
+                logger.warning(
+                    "No Yahoo ticks for %.1fs; forcing websocket reconnect",
+                    idle_for,
+                )
+                reconnect_event.set()
+                return
+            await asyncio.sleep(min(5.0, max(1.0, WS_STALE_TIMEOUT_SEC / 6.0)))
+
+    reconnect_attempts = 0
 
     try:
-        async with yf.AsyncWebSocket() as ws:
-            if initial_symbols:
-                await ws.subscribe(initial_symbols)
-                subscribed_symbols.update(initial_symbols)
-            logger.info("Subscribed! Listening for real-time ticks ...")
+        while not stop_event.is_set():
+            registry.reload_if_changed()
+            initial_symbols = registry.get_all_symbols()
+            if not initial_symbols:
+                logger.warning("Registry is empty, waiting before retrying Yahoo connection")
+                await asyncio.sleep(WS_RECONNECT_BASE_DELAY_SEC)
+                continue
 
-            # listen() chạy mãi — ta dùng stop_event để thoát gracefully
-            listen_task = asyncio.create_task(
-                ws.listen(message_handler=on_message)
+            subscribed_symbols: Set[str] = set()
+            reconnect_event = asyncio.Event()
+            session_message_count = 0
+            last_message_at = time.monotonic()
+
+            def on_message_with_counter(raw: Dict[str, Any]):
+                nonlocal session_message_count, reconnect_attempts
+                session_message_count += 1
+                reconnect_attempts = 0
+                on_message(raw)
+
+            logger.info(
+                "Connecting to Yahoo Finance WebSocket (attempt=%d)",
+                reconnect_attempts + 1,
             )
-            registry_task = asyncio.create_task(sync_subscriptions(ws))
+            logger.info("Subscribing to %d symbols from registry", len(initial_symbols))
 
-            # chờ stop signal hoặc listen kết thúc
-            done, pending = await asyncio.wait(
-                [listen_task, registry_task, asyncio.create_task(stop_event.wait())],
-                return_when=asyncio.FIRST_COMPLETED,
+            try:
+                # Always create a fresh AsyncWebSocket instance when reconnecting.
+                async with yf.AsyncWebSocket(verbose=False) as ws:
+                    await ws.subscribe(initial_symbols)
+                    subscribed_symbols.update(initial_symbols)
+                    logger.info("Subscribed! Listening for real-time ticks ...")
+
+                    listen_task = asyncio.create_task(
+                        ws.listen(message_handler=on_message_with_counter)
+                    )
+                    registry_task = asyncio.create_task(sync_subscriptions(ws, subscribed_symbols))
+                    watchdog_task = asyncio.create_task(watch_connection(reconnect_event))
+                    stop_task = asyncio.create_task(stop_event.wait())
+                    reconnect_task = asyncio.create_task(reconnect_event.wait())
+
+                    done, pending = await asyncio.wait(
+                        [listen_task, registry_task, watchdog_task, stop_task, reconnect_task],
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    for task in pending:
+                        task.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+                    if stop_task in done and stop_event.is_set():
+                        break
+
+                    if reconnect_task in done and reconnect_event.is_set():
+                        logger.warning("WebSocket session became stale; recycling connection")
+                    elif listen_task in done:
+                        exc = listen_task.exception()
+                        if exc is not None:
+                            logger.warning("WebSocket listener stopped: %s", exc)
+                        else:
+                            logger.warning("WebSocket listener exited unexpectedly")
+
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning("WebSocket session failed: %s", e)
+
+            if stop_event.is_set():
+                break
+
+            if session_message_count == 0:
+                reconnect_attempts += 1
+            else:
+                reconnect_attempts = 0
+
+            delay = min(
+                WS_RECONNECT_MAX_DELAY_SEC,
+                WS_RECONNECT_BASE_DELAY_SEC * (2 ** min(reconnect_attempts, 5)),
             )
+            logger.info("Reconnecting Yahoo WebSocket in %.1fs", delay)
+            await asyncio.sleep(delay)
 
-            for task in pending:
-                task.cancel()
-
-    except Exception as e:
-        logger.error("WebSocket error: %s", e)
     finally:
         # flush hết message còn lại trong buffer
         remaining = producer.flush(timeout=10)

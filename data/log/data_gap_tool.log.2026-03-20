@@ -1,0 +1,2030 @@
+2026-03-20 17:11:21 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-20 17:11:21 @data_gap_tool.log [INFO]:    Audit summary: {'registry_total': 101, 'missing_counts': {'latest': 45, 'daily': 46, 'ticks': 45, 'agg_5m': 48, 'agg_1h': 46, 'agg_3h': 46, 'agg_6h': 46}}
+2026-03-20 17:11:21 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-20 17:11:21 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-20 17:11:35 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-20 17:11:35 @data_gap_tool.log [INFO]:    Backfilling 46 symbols
+2026-03-20 17:11:37 @data_gap_tool.log [INFO]:    Resolved VCB/vn -> VCB.VN
+2026-03-20 17:11:37 @data_gap_tool.log [ERROR]:    Backfill failed for VCB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:37 @data_gap_tool.log [INFO]:    Resolved VIC/vn -> VIC.VN
+2026-03-20 17:11:38 @data_gap_tool.log [ERROR]:    Backfill failed for VIC: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:38 @data_gap_tool.log [INFO]:    Resolved VHM/vn -> VHM.VN
+2026-03-20 17:11:38 @data_gap_tool.log [ERROR]:    Backfill failed for VHM: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:38 @data_gap_tool.log [INFO]:    Resolved BID/vn -> BID.VN
+2026-03-20 17:11:39 @data_gap_tool.log [ERROR]:    Backfill failed for BID: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:39 @data_gap_tool.log [INFO]:    Resolved TCB/vn -> TCB.VN
+2026-03-20 17:11:39 @data_gap_tool.log [ERROR]:    Backfill failed for TCB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:39 @data_gap_tool.log [INFO]:    Resolved CTG/vn -> CTG.VN
+2026-03-20 17:11:39 @data_gap_tool.log [ERROR]:    Backfill failed for CTG: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:41 @data_gap_tool.log [INFO]:    Resolved VGI/vn -> VGI
+2026-03-20 17:11:42 @data_gap_tool.log [ERROR]:    Backfill failed for VGI: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:43 @data_gap_tool.log [INFO]:    Resolved ACV/vn -> ACV
+2026-03-20 17:11:44 @data_gap_tool.log [ERROR]:    Backfill failed for ACV: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:44 @data_gap_tool.log [INFO]:    Resolved FPT/vn -> FPT.VN
+2026-03-20 17:11:44 @data_gap_tool.log [ERROR]:    Backfill failed for FPT: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:44 @data_gap_tool.log [INFO]:    Resolved HPG/vn -> HPG.VN
+2026-03-20 17:11:45 @data_gap_tool.log [ERROR]:    Backfill failed for HPG: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:45 @data_gap_tool.log [INFO]:    Resolved MSN/vn -> MSN.VN
+2026-03-20 17:11:45 @data_gap_tool.log [ERROR]:    Backfill failed for MSN: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:45 @data_gap_tool.log [INFO]:    Resolved GVR/vn -> GVR.VN
+2026-03-20 17:11:45 @data_gap_tool.log [ERROR]:    Backfill failed for GVR: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:46 @data_gap_tool.log [INFO]:    Resolved GAS/vn -> GAS.VN
+2026-03-20 17:11:46 @data_gap_tool.log [ERROR]:    Backfill failed for GAS: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:46 @data_gap_tool.log [INFO]:    Resolved VPB/vn -> VPB.VN
+2026-03-20 17:11:46 @data_gap_tool.log [ERROR]:    Backfill failed for VPB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:47 @data_gap_tool.log [INFO]:    Resolved STB/vn -> STB.VN
+2026-03-20 17:11:47 @data_gap_tool.log [ERROR]:    Backfill failed for STB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:47 @data_gap_tool.log [INFO]:    Resolved SHB/vn -> SHB.VN
+2026-03-20 17:11:47 @data_gap_tool.log [ERROR]:    Backfill failed for SHB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:47 @data_gap_tool.log [INFO]:    Resolved LPB/vn -> LPB.VN
+2026-03-20 17:11:48 @data_gap_tool.log [ERROR]:    Backfill failed for LPB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:48 @data_gap_tool.log [INFO]:    Resolved VIB/vn -> VIB.VN
+2026-03-20 17:11:48 @data_gap_tool.log [ERROR]:    Backfill failed for VIB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:48 @data_gap_tool.log [INFO]:    Resolved BCM/vn -> BCM.VN
+2026-03-20 17:11:49 @data_gap_tool.log [ERROR]:    Backfill failed for BCM: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:49 @data_gap_tool.log [INFO]:    Resolved PLX/vn -> PLX.VN
+2026-03-20 17:11:49 @data_gap_tool.log [ERROR]:    Backfill failed for PLX: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:49 @data_gap_tool.log [INFO]:    Resolved SAB/vn -> SAB.VN
+2026-03-20 17:11:50 @data_gap_tool.log [ERROR]:    Backfill failed for SAB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:50 @data_gap_tool.log [INFO]:    Resolved POW/vn -> POW.VN
+2026-03-20 17:11:50 @data_gap_tool.log [ERROR]:    Backfill failed for POW: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:50 @data_gap_tool.log [INFO]:    Resolved VJC/vn -> VJC.VN
+2026-03-20 17:11:50 @data_gap_tool.log [ERROR]:    Backfill failed for VJC: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:51 @data_gap_tool.log [INFO]:    Resolved REE/vn -> REE.VN
+2026-03-20 17:11:51 @data_gap_tool.log [ERROR]:    Backfill failed for REE: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:51 @data_gap_tool.log [INFO]:    Resolved GMD/vn -> GMD.VN
+2026-03-20 17:11:51 @data_gap_tool.log [ERROR]:    Backfill failed for GMD: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:52 @data_gap_tool.log [INFO]:    Resolved VRE/vn -> VRE.VN
+2026-03-20 17:11:52 @data_gap_tool.log [ERROR]:    Backfill failed for VRE: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:52 @data_gap_tool.log [INFO]:    Resolved VCI/vn -> VCI.VN
+2026-03-20 17:11:52 @data_gap_tool.log [ERROR]:    Backfill failed for VCI: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:52 @data_gap_tool.log [INFO]:    Resolved SSI/vn -> SSI.VN
+2026-03-20 17:11:53 @data_gap_tool.log [ERROR]:    Backfill failed for SSI: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:53 @data_gap_tool.log [INFO]:    Resolved HCM/vn -> HCM.VN
+2026-03-20 17:11:53 @data_gap_tool.log [ERROR]:    Backfill failed for HCM: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:53 @data_gap_tool.log [INFO]:    Resolved DGC/vn -> DGC.VN
+2026-03-20 17:11:54 @data_gap_tool.log [ERROR]:    Backfill failed for DGC: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:54 @data_gap_tool.log [INFO]:    Resolved PDR/vn -> PDR.VN
+2026-03-20 17:11:54 @data_gap_tool.log [ERROR]:    Backfill failed for PDR: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:54 @data_gap_tool.log [INFO]:    Resolved KDH/vn -> KDH.VN
+2026-03-20 17:11:55 @data_gap_tool.log [ERROR]:    Backfill failed for KDH: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:55 @data_gap_tool.log [INFO]:    Resolved NVL/vn -> NVL.VN
+2026-03-20 17:11:55 @data_gap_tool.log [ERROR]:    Backfill failed for NVL: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:55 @data_gap_tool.log [INFO]:    Resolved KBC/vn -> KBC.VN
+2026-03-20 17:11:55 @data_gap_tool.log [ERROR]:    Backfill failed for KBC: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:56 @data_gap_tool.log [INFO]:    Resolved DPM/vn -> DPM.VN
+2026-03-20 17:11:56 @data_gap_tool.log [ERROR]:    Backfill failed for DPM: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:56 @data_gap_tool.log [INFO]:    Resolved DCM/vn -> DCM.VN
+2026-03-20 17:11:56 @data_gap_tool.log [ERROR]:    Backfill failed for DCM: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:57 @data_gap_tool.log [INFO]:    Resolved PVD/vn -> PVD.VN
+2026-03-20 17:11:57 @data_gap_tool.log [ERROR]:    Backfill failed for PVD: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:57 @data_gap_tool.log [INFO]:    Resolved PNJ/vn -> PNJ.VN
+2026-03-20 17:11:57 @data_gap_tool.log [ERROR]:    Backfill failed for PNJ: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:57 @data_gap_tool.log [INFO]:    Resolved DHG/vn -> DHG.VN
+2026-03-20 17:11:58 @data_gap_tool.log [ERROR]:    Backfill failed for DHG: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:58 @data_gap_tool.log [INFO]:    Resolved DIG/vn -> DIG.VN
+2026-03-20 17:11:58 @data_gap_tool.log [ERROR]:    Backfill failed for DIG: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:58 @data_gap_tool.log [INFO]:    Resolved BVH/vn -> BVH.VN
+2026-03-20 17:11:59 @data_gap_tool.log [ERROR]:    Backfill failed for BVH: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:59 @data_gap_tool.log [INFO]:    Resolved BSR/vn -> BSR.VN
+2026-03-20 17:11:59 @data_gap_tool.log [ERROR]:    Backfill failed for BSR: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:11:59 @data_gap_tool.log [INFO]:    Resolved EIB/vn -> EIB.VN
+2026-03-20 17:11:59 @data_gap_tool.log [ERROR]:    Backfill failed for EIB: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:12:03 @data_gap_tool.log [WARNING]:    Could not resolve provider symbol for DFJKL/vn
+2026-03-20 17:12:03 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DFJKL', 'market': 'vn', 'status': 'unresolved'}
+2026-03-20 17:12:04 @data_gap_tool.log [INFO]:    Resolved TCEHY/world -> TCEHY
+2026-03-20 17:12:04 @data_gap_tool.log [ERROR]:    Backfill failed for TCEHY: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:12:04 @data_gap_tool.log [INFO]:    Resolved TM/world -> TM
+2026-03-20 17:12:04 @data_gap_tool.log [ERROR]:    Backfill failed for TM: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6213, in pandas._libs.tslibs.offsets._get_offset
+KeyError: 'H'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pandas/_libs/tslibs/offsets.pyx", line 6344, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6219, in pandas._libs.tslibs.offsets._get_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/app/data_gap_tool.py", line 488, in main
+    result = tool.backfill_symbol(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 414, in backfill_symbol
+    intraday_frames = self._prepare_intraday_frames(provider_symbol)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 217, in _prepare_intraday_frames
+    frames["1h"] = self._resample(base_5m, "1H")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data_gap_tool.py", line 194, in _resample
+    grouped = df.resample(rule).agg(
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/generic.py", line 9423, in resample
+    return get_resampler(
+           ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2334, in get_resampler
+    tg = TimeGrouper(obj, **kwds)  # type: ignore[arg-type]
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/pandas/core/resample.py", line 2420, in __init__
+    freq = to_offset(freq)
+           ^^^^^^^^^^^^^^^
+  File "pandas/_libs/tslibs/offsets.pyx", line 6229, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6352, in pandas._libs.tslibs.offsets.to_offset
+  File "pandas/_libs/tslibs/offsets.pyx", line 6137, in pandas._libs.tslibs.offsets.raise_invalid_freq
+ValueError: Invalid frequency: 1H. Failed to parse with error message: ValueError("Invalid frequency: H. Failed to parse with error message: KeyError('H'). Did you mean h?")
+2026-03-20 17:12:05 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-20 17:12:05 @data_gap_tool.log [INFO]:    Wrote backfill payload to /var/log/stockraw/data_gap_backfill.json
+2026-03-20 17:12:05 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-20 17:12:26 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-20 17:12:26 @data_gap_tool.log [INFO]:    Backfilling 3 symbols
+2026-03-20 17:12:28 @data_gap_tool.log [INFO]:    Resolved VCB/vn -> VCB.VN
+2026-03-20 17:12:28 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VCB', 'market': 'vn', 'provider_symbol': 'VCB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:28 @data_gap_tool.log [INFO]:    Resolved VIC/vn -> VIC.VN
+2026-03-20 17:12:29 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VIC', 'market': 'vn', 'provider_symbol': 'VIC.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:29 @data_gap_tool.log [INFO]:    Resolved VHM/vn -> VHM.VN
+2026-03-20 17:12:30 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VHM', 'market': 'vn', 'provider_symbol': 'VHM.VN', 'status': 'ok', 'inserted': {'stock_prices': 231, 'stock_prices_agg': 281, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:30 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-20 17:12:30 @data_gap_tool.log [INFO]:    Wrote backfill payload to /var/log/stockraw/data_gap_backfill.json
+2026-03-20 17:12:30 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-20 17:12:43 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-20 17:12:43 @data_gap_tool.log [INFO]:    Backfilling 43 symbols
+2026-03-20 17:12:45 @data_gap_tool.log [INFO]:    Resolved BID/vn -> BID.VN
+2026-03-20 17:12:45 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'BID', 'market': 'vn', 'provider_symbol': 'BID.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:45 @data_gap_tool.log [INFO]:    Resolved TCB/vn -> TCB.VN
+2026-03-20 17:12:46 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'TCB', 'market': 'vn', 'provider_symbol': 'TCB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:46 @data_gap_tool.log [INFO]:    Resolved CTG/vn -> CTG.VN
+2026-03-20 17:12:47 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'CTG', 'market': 'vn', 'provider_symbol': 'CTG.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:48 @data_gap_tool.log [INFO]:    Resolved VGI/vn -> VGI
+2026-03-20 17:12:49 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VGI', 'market': 'vn', 'provider_symbol': 'VGI', 'status': 'ok', 'inserted': {'stock_prices': 106, 'stock_prices_agg': 165, 'stock_daily_summary': 60, 'stock_latest_prices': 1}}
+2026-03-20 17:12:50 @data_gap_tool.log [INFO]:    Resolved ACV/vn -> ACV
+2026-03-20 17:12:51 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'ACV', 'market': 'vn', 'provider_symbol': 'ACV', 'status': 'ok', 'inserted': {'stock_prices': 112, 'stock_prices_agg': 170, 'stock_daily_summary': 60, 'stock_latest_prices': 1}}
+2026-03-20 17:12:51 @data_gap_tool.log [INFO]:    Resolved FPT/vn -> FPT.VN
+2026-03-20 17:12:52 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'FPT', 'market': 'vn', 'provider_symbol': 'FPT.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:52 @data_gap_tool.log [INFO]:    Resolved HPG/vn -> HPG.VN
+2026-03-20 17:12:52 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'HPG', 'market': 'vn', 'provider_symbol': 'HPG.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:53 @data_gap_tool.log [INFO]:    Resolved MSN/vn -> MSN.VN
+2026-03-20 17:12:53 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'MSN', 'market': 'vn', 'provider_symbol': 'MSN.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:53 @data_gap_tool.log [INFO]:    Resolved GVR/vn -> GVR.VN
+2026-03-20 17:12:54 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'GVR', 'market': 'vn', 'provider_symbol': 'GVR.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:54 @data_gap_tool.log [INFO]:    Resolved GAS/vn -> GAS.VN
+2026-03-20 17:12:55 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'GAS', 'market': 'vn', 'provider_symbol': 'GAS.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:55 @data_gap_tool.log [INFO]:    Resolved VPB/vn -> VPB.VN
+2026-03-20 17:12:55 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VPB', 'market': 'vn', 'provider_symbol': 'VPB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:56 @data_gap_tool.log [INFO]:    Resolved STB/vn -> STB.VN
+2026-03-20 17:12:56 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'STB', 'market': 'vn', 'provider_symbol': 'STB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:56 @data_gap_tool.log [INFO]:    Resolved SHB/vn -> SHB.VN
+2026-03-20 17:12:57 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'SHB', 'market': 'vn', 'provider_symbol': 'SHB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:57 @data_gap_tool.log [INFO]:    Resolved LPB/vn -> LPB.VN
+2026-03-20 17:12:58 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'LPB', 'market': 'vn', 'provider_symbol': 'LPB.VN', 'status': 'ok', 'inserted': {'stock_prices': 226, 'stock_prices_agg': 276, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:58 @data_gap_tool.log [INFO]:    Resolved VIB/vn -> VIB.VN
+2026-03-20 17:12:58 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VIB', 'market': 'vn', 'provider_symbol': 'VIB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:59 @data_gap_tool.log [INFO]:    Resolved BCM/vn -> BCM.VN
+2026-03-20 17:12:59 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'BCM', 'market': 'vn', 'provider_symbol': 'BCM.VN', 'status': 'ok', 'inserted': {'stock_prices': 228, 'stock_prices_agg': 278, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:12:59 @data_gap_tool.log [INFO]:    Resolved PLX/vn -> PLX.VN
+2026-03-20 17:13:00 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'PLX', 'market': 'vn', 'provider_symbol': 'PLX.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:00 @data_gap_tool.log [INFO]:    Resolved SAB/vn -> SAB.VN
+2026-03-20 17:13:00 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'SAB', 'market': 'vn', 'provider_symbol': 'SAB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:01 @data_gap_tool.log [INFO]:    Resolved POW/vn -> POW.VN
+2026-03-20 17:13:01 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'POW', 'market': 'vn', 'provider_symbol': 'POW.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:01 @data_gap_tool.log [INFO]:    Resolved VJC/vn -> VJC.VN
+2026-03-20 17:13:02 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VJC', 'market': 'vn', 'provider_symbol': 'VJC.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:02 @data_gap_tool.log [INFO]:    Resolved REE/vn -> REE.VN
+2026-03-20 17:13:03 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'REE', 'market': 'vn', 'provider_symbol': 'REE.VN', 'status': 'ok', 'inserted': {'stock_prices': 229, 'stock_prices_agg': 279, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:03 @data_gap_tool.log [INFO]:    Resolved GMD/vn -> GMD.VN
+2026-03-20 17:13:03 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'GMD', 'market': 'vn', 'provider_symbol': 'GMD.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:04 @data_gap_tool.log [INFO]:    Resolved VRE/vn -> VRE.VN
+2026-03-20 17:13:04 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VRE', 'market': 'vn', 'provider_symbol': 'VRE.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:04 @data_gap_tool.log [INFO]:    Resolved VCI/vn -> VCI.VN
+2026-03-20 17:13:05 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VCI', 'market': 'vn', 'provider_symbol': 'VCI.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:05 @data_gap_tool.log [INFO]:    Resolved SSI/vn -> SSI.VN
+2026-03-20 17:13:06 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'SSI', 'market': 'vn', 'provider_symbol': 'SSI.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:06 @data_gap_tool.log [INFO]:    Resolved HCM/vn -> HCM.VN
+2026-03-20 17:13:06 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'HCM', 'market': 'vn', 'provider_symbol': 'HCM.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:07 @data_gap_tool.log [INFO]:    Resolved DGC/vn -> DGC.VN
+2026-03-20 17:13:07 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DGC', 'market': 'vn', 'provider_symbol': 'DGC.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:07 @data_gap_tool.log [INFO]:    Resolved PDR/vn -> PDR.VN
+2026-03-20 17:13:08 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'PDR', 'market': 'vn', 'provider_symbol': 'PDR.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:08 @data_gap_tool.log [INFO]:    Resolved KDH/vn -> KDH.VN
+2026-03-20 17:13:09 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'KDH', 'market': 'vn', 'provider_symbol': 'KDH.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:09 @data_gap_tool.log [INFO]:    Resolved NVL/vn -> NVL.VN
+2026-03-20 17:13:09 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'NVL', 'market': 'vn', 'provider_symbol': 'NVL.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:10 @data_gap_tool.log [INFO]:    Resolved KBC/vn -> KBC.VN
+2026-03-20 17:13:10 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'KBC', 'market': 'vn', 'provider_symbol': 'KBC.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:10 @data_gap_tool.log [INFO]:    Resolved DPM/vn -> DPM.VN
+2026-03-20 17:13:11 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DPM', 'market': 'vn', 'provider_symbol': 'DPM.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:11 @data_gap_tool.log [INFO]:    Resolved DCM/vn -> DCM.VN
+2026-03-20 17:13:12 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DCM', 'market': 'vn', 'provider_symbol': 'DCM.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:12 @data_gap_tool.log [INFO]:    Resolved PVD/vn -> PVD.VN
+2026-03-20 17:13:12 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'PVD', 'market': 'vn', 'provider_symbol': 'PVD.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:13 @data_gap_tool.log [INFO]:    Resolved PNJ/vn -> PNJ.VN
+2026-03-20 17:13:13 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'PNJ', 'market': 'vn', 'provider_symbol': 'PNJ.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:13 @data_gap_tool.log [INFO]:    Resolved DHG/vn -> DHG.VN
+2026-03-20 17:13:14 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DHG', 'market': 'vn', 'provider_symbol': 'DHG.VN', 'status': 'ok', 'inserted': {'stock_prices': 81, 'stock_prices_agg': 131, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:14 @data_gap_tool.log [INFO]:    Resolved DIG/vn -> DIG.VN
+2026-03-20 17:13:14 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DIG', 'market': 'vn', 'provider_symbol': 'DIG.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:15 @data_gap_tool.log [INFO]:    Resolved BVH/vn -> BVH.VN
+2026-03-20 17:13:15 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'BVH', 'market': 'vn', 'provider_symbol': 'BVH.VN', 'status': 'ok', 'inserted': {'stock_prices': 228, 'stock_prices_agg': 278, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:15 @data_gap_tool.log [INFO]:    Resolved BSR/vn -> BSR.VN
+2026-03-20 17:13:16 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'BSR', 'market': 'vn', 'provider_symbol': 'BSR.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:16 @data_gap_tool.log [INFO]:    Resolved EIB/vn -> EIB.VN
+2026-03-20 17:13:17 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'EIB', 'market': 'vn', 'provider_symbol': 'EIB.VN', 'status': 'ok', 'inserted': {'stock_prices': 230, 'stock_prices_agg': 280, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:13:21 @data_gap_tool.log [WARNING]:    Could not resolve provider symbol for DFJKL/vn
+2026-03-20 17:13:21 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DFJKL', 'market': 'vn', 'status': 'unresolved'}
+2026-03-20 17:13:21 @data_gap_tool.log [INFO]:    Resolved TCEHY/world -> TCEHY
+2026-03-20 17:13:22 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'TCEHY', 'market': 'world', 'provider_symbol': 'TCEHY', 'status': 'ok', 'inserted': {'stock_prices': 390, 'stock_prices_agg': 450, 'stock_daily_summary': 60, 'stock_latest_prices': 1}}
+2026-03-20 17:13:22 @data_gap_tool.log [INFO]:    Resolved TM/world -> TM
+2026-03-20 17:13:23 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'TM', 'market': 'world', 'provider_symbol': 'TM', 'status': 'ok', 'inserted': {'stock_prices': 371, 'stock_prices_agg': 431, 'stock_daily_summary': 60, 'stock_latest_prices': 1}}
+2026-03-20 17:13:23 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-20 17:13:23 @data_gap_tool.log [INFO]:    Wrote backfill payload to /var/log/stockraw/data_gap_backfill.json
+2026-03-20 17:13:23 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-20 17:14:33 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-20 17:14:34 @data_gap_tool.log [INFO]:    Audit summary: {'registry_total': 101, 'missing_counts': {'latest': 1, 'daily': 1, 'ticks': 1, 'agg_5m': 3, 'agg_1h': 1, 'agg_3h': 1, 'agg_6h': 1}}
+2026-03-20 17:14:34 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-20 17:14:34 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-20 17:16:10 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-20 17:16:11 @data_gap_tool.log [INFO]:    Backfilling 3 symbols
+2026-03-20 17:16:15 @data_gap_tool.log [INFO]:    Resolved VNM/vn -> VNM.VN
+2026-03-20 17:16:15 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'VNM', 'market': 'vn', 'provider_symbol': 'VNM.VN', 'status': 'ok', 'inserted': {'stock_prices': 231, 'stock_prices_agg': 281, 'stock_daily_summary': 53, 'stock_latest_prices': 1}}
+2026-03-20 17:16:35 @data_gap_tool.log [WARNING]:    Could not resolve provider symbol for DFJKL/vn
+2026-03-20 17:16:35 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'DFJKL', 'market': 'vn', 'status': 'unresolved'}
+2026-03-20 17:16:35 @data_gap_tool.log [INFO]:    Resolved ABBV/world -> ABBV
+2026-03-20 17:16:36 @data_gap_tool.log [INFO]:    Backfill result {'symbol': 'ABBV', 'market': 'world', 'provider_symbol': 'ABBV', 'status': 'ok', 'inserted': {'stock_prices': 390, 'stock_prices_agg': 450, 'stock_daily_summary': 60, 'stock_latest_prices': 1}}
+2026-03-20 17:16:36 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-20 17:16:36 @data_gap_tool.log [INFO]:    Wrote backfill payload to /var/log/stockraw/data_gap_backfill.json
+2026-03-20 17:16:36 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-20 17:17:19 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-20 17:17:19 @data_gap_tool.log [INFO]:    Audit summary: {'registry_total': 100, 'missing_counts': {'latest': 0, 'daily': 0, 'ticks': 0, 'agg_5m': 0, 'agg_1h': 0, 'agg_3h': 0, 'agg_6h': 0}}
+2026-03-20 17:17:19 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-20 17:17:19 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-21 00:55:00 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-21 00:55:01 @data_gap_tool.log [INFO]:    Audit summary: {'registry_total': 100, 'missing_counts': {'latest': 0, 'daily': 0, 'ticks': 0, 'agg_5m': 0, 'agg_1h': 0, 'agg_3h': 0, 'agg_6h': 0}}
+2026-03-21 00:55:01 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-21 00:55:01 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection
+2026-03-21 01:02:08 @data_gap_tool.log [INFO]:    Connecting to ScyllaDB for audit/backfill
+2026-03-21 01:02:08 @data_gap_tool.log [INFO]:    Audit summary: {'registry_total': 100, 'missing_counts': {'latest': 0, 'daily': 0, 'ticks': 0, 'agg_5m': 0, 'agg_1h': 0, 'agg_3h': 0, 'agg_6h': 0}}
+2026-03-21 01:02:08 @data_gap_tool.log [INFO]:    Wrote audit report to /var/log/stockraw/data_gap_report.json
+2026-03-21 01:02:08 @data_gap_tool.log [INFO]:    Closed ScyllaDB connection

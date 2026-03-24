@@ -10,7 +10,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/css/style.css?v=20260320g" />
+  <link rel="stylesheet" href="/css/style.css?v=20260324b" />
   <script>
     /* ── Theme: runs before paint to avoid FOUC ── */
     (function(){
@@ -231,6 +231,16 @@
           <canvas id="overviewSignalChart"></canvas>
         </div>
         <div class="ov-signal-summary" id="ovSignalSummary"></div>
+        <div class="ov-alert-board">
+          <div class="ov-alert-head">
+            <div>
+              <strong>Nghi vấn cá mập / bất thường</strong>
+              <span class="ov-alert-sub">Các mã được đẩy lên từ module search BOCPD</span>
+            </div>
+            <span class="ov-alert-count" id="ovAlertCount">--</span>
+          </div>
+          <div class="ov-alert-list" id="ovSignalAlerts"></div>
+        </div>
       </div>
 
     </div>
@@ -478,6 +488,6 @@
 <!-- ═══ SCRIPTS ══════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script src="/js/app.js?v=20260320g"></script>
+  <script src="/js/app.js?v=20260324b"></script>
 </body>
 </html>

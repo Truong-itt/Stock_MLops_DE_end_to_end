@@ -74,6 +74,20 @@ services:
     networks:
       - stock-network
 
+  clickhouse-sync-tool:
+    container_name: clickhouse-sync-tool
+    build: .
+    command: ["python", "-u", "clickhouse_sync_tool.py", "audit", "--write-report"]
+    restart: "no"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SYMBOL_REGISTRY_PATH=/app/config/symbol_registry.json
+    volumes:
+      - ./log:/var/log/stockraw/
+      - ../config:/app/config:rw
+    networks:
+      - stock-network
+
 volumes:
   sentiment-model-cache:
 

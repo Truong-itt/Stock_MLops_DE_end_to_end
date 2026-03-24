@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 
 from database import db
+from clickhouse_db import ch_db
 from routes import router
 from ws import websocket_endpoint, poll_latest_prices
 
@@ -30,6 +31,11 @@ async def lifespan(app: FastAPI):
     global poll_task
     logger.info("Starting backend ...")
     db.connect()
+    try:
+        ch_db.connect()
+    except Exception as exc:
+        # Keep the API alive with Scylla fallback even if ClickHouse is temporarily unavailable.
+        logger.warning("ClickHouse connect skipped on startup: %s", exc)
     poll_task = asyncio.create_task(poll_latest_prices())
     logger.info("Background poller started")
     yield
@@ -40,6 +46,7 @@ async def lifespan(app: FastAPI):
             await poll_task
         except asyncio.CancelledError:
             pass
+    ch_db.close()
     db.close()
 
 
@@ -80,4 +87,3 @@ if STATIC_DIR.is_dir():
             '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
         )
         return Response(content=svg, media_type="image/svg+xml")
-

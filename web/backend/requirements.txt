@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 cassandra-driver
+clickhouse-connect
 aiokafka
 confluent-kafka
 websockets

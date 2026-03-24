@@ -1,0 +1,28 @@
+{
+  "sync_finished_at": "2026-03-20T16:08:58.037320+00:00",
+  "before": {
+    "registry_total": 100,
+    "scylla_raw_registry_count": 100,
+    "clickhouse_raw_registry_count": 100,
+    "raw_missing_in_clickhouse_count": 0,
+    "raw_lagging_in_clickhouse_count": 1
+  },
+  "after": {
+    "registry_total": 100,
+    "scylla_raw_registry_count": 100,
+    "clickhouse_raw_registry_count": 100,
+    "raw_missing_in_clickhouse_count": 0,
+    "raw_lagging_in_clickhouse_count": 0
+  },
+  "results": [
+    {
+      "symbol": "BABA",
+      "status": "ok",
+      "inserted_rows": 21,
+      "existing_rows": 242,
+      "scylla_rows": 263,
+      "invalid_rows": 0,
+      "latest_inserted_event_time": "2026-03-20T11:04:41+00:00"
+    }
+  ]
+}
