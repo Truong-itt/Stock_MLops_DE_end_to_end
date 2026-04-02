@@ -32,11 +32,13 @@ docker compose up -d --build
 
 1. Airflow DAG gọi `GET /health` của whale-ml-service.
 2. Gọi `POST /train` với tham số từ `dag_run.conf` (hoặc Airflow Variables).
-3. Sau train, verify `GET /model/info`:
+3. Service train 3 classifier + 3 regressor, chọn winner theo score và auto promote alias `production`.
+4. Sau train, verify `GET /model/info`:
    - `ready=true`
    - có `mlflow_run_id`
    - có `model_version`
-4. Web backend gọi `POST /predict-batch` để enrich cảnh báo BOCPD bằng forecast ML.
+   - có `selected_models.direction` và `selected_models.sessions`
+5. Web backend gọi `POST /predict-batch` để enrich cảnh báo BOCPD bằng forecast ML.
 
 ## DAG retrain
 
@@ -68,6 +70,21 @@ docker compose exec airflow-webserver \
 - `AUTO_RETRAIN_INTERVAL_MIN=0` để tránh train chồng trong service.
 - Serving ưu tiên MLflow Registry alias `production`.
 - Giữ local artifact làm fallback an toàn khi registry lỗi tạm thời.
+
+## Tiêu chí chọn winner production
+
+- Direction winner: score cao nhất theo `ROC-AUC`; nếu candidate không tính được ROC-AUC thì fallback theo `Accuracy`.
+- Sessions winner: score cao nhất theo `-MAE` (tức là MAE nhỏ nhất sẽ thắng).
+- Sau khi chọn winner, service tự register model version mới và tự set alias `production` sang version này.
+
+## Kiểm tra nhanh sau retrain
+
+Từ thư mục `mlops/infra`:
+
+```bash
+curl -s http://localhost:8090/health | jq '.data | {model_name, model_version, selected_models, mlflow_run_id}'
+curl -s http://localhost:8090/model/info | jq '.data | {ready, selected_models, metrics, model_version, model_source}'
+```
 
 ## Tài liệu chi tiết
 

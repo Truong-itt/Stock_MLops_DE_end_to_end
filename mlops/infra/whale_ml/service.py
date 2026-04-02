@@ -122,6 +122,7 @@ async def health():
             "model_source": info.get("model_source"),
             "model_name": info.get("model_name"),
             "model_version": info.get("model_version", info.get("version")),
+            "selected_models": info.get("selected_models"),
             "mlflow_run_id": info.get("mlflow_run_id"),
             "trained_at": info.get("trained_at"),
             "samples": info.get("samples"),

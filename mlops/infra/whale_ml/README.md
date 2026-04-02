@@ -56,21 +56,19 @@ Từ BOCPD event + ngữ cảnh thời gian/market:
 
 ### 2.5 Mô hình và hàm dự báo
 
-- Classifier: Logistic Regression (học `P(up)`):
-
-$$
-P(\text{up}\mid x)=\sigma(w^\top x+b)
-$$
-
-$$
-P(\text{down}\mid x)=1-P(\text{up}\mid x)
-$$
-
-- Regressor: RandomForestRegressor (học số phiên):
-
-$$
-\hat{s}=f_{\text{RF}}(x),\quad \hat{s}\in[1,H]
-$$
+- Bài toán hướng `up/down` train 3 classifier:
+  - `logistic_regression`
+  - `random_forest_classifier`
+  - `gradient_boosting_classifier`
+- Bài toán số phiên kỳ vọng train 3 regressor:
+  - `random_forest_regressor`
+  - `extra_trees_regressor`
+  - `gradient_boosting_regressor`
+- Chọn model tốt nhất tự động:
+  - Direction score: ưu tiên `ROC-AUC`, fallback `Accuracy` nếu không tính được AUC
+  - Sessions score: `-MAE` (tương đương MAE càng thấp càng tốt)
+  - Khi hòa điểm, direction ưu tiên `Accuracy` cao hơn; sessions ưu tiên `MAE` thấp hơn
+- Pair winner (1 classifier + 1 regressor) được đóng gói để serving và đưa lên alias `production`.
 
 - Quy tắc output:
 
@@ -90,7 +88,8 @@ $$
 
 - Accuracy cho hướng
 - ROC-AUC cho xác suất hướng
-- MAE cho số phiên:
+- F1 cho hướng
+- MAE và RMSE cho số phiên:
 
 $$
 \text{MAE}=\frac{1}{n}\sum_{i=1}^{n}|y_i-\hat{y}_i|
@@ -100,19 +99,22 @@ $$
 
 Mỗi lần `POST /train`:
 
-1. Train classifier + regressor từ ClickHouse.
-2. Log MLflow run (params/metrics/artifacts).
-3. Đăng ký model vào MLflow Registry:
+1. Train 3 classifier + 3 regressor từ ClickHouse.
+2. Chấm điểm trên tập test và tự chọn winner cho từng task.
+3. Log MLflow run (params/metrics/artifacts + leaderboard candidate qua các metric `classifier_*`, `regressor_*`).
+4. Đăng ký model vào MLflow Registry:
    - model name mặc định: `whale_move_forecaster`
-   - alias phục vụ: `production`
-4. Cập nhật metadata trong model bundle:
+   - alias phục vụ: `production` (được cập nhật tự động sang winner mới)
+5. Cập nhật metadata trong model bundle:
+   - `selected_models`
+   - `model_candidates`
    - `mlflow_run_id`
    - `model_name`
    - `model_version`
    - `model_uri`
    - `model_alias_uri`
    - `model_source`
-5. Load model cho serving theo thứ tự:
+6. Load model cho serving theo thứ tự:
    - ưu tiên `MLflow Registry` (`models:/...@production`)
    - fallback `joblib` local `/app/artifacts/whale_move_model.joblib`
 
@@ -144,7 +146,15 @@ Mỗi lần `POST /train`:
     "metrics": {
       "accuracy": 0.62,
       "roc_auc": 0.67,
-      "mae_sessions": 0.88
+      "f1_direction": 0.61,
+      "mae_sessions": 0.88,
+      "rmse_sessions": 1.12,
+      "classifier_score": 0.67,
+      "regressor_score": -0.88
+    },
+    "selected_models": {
+      "direction": "random_forest_classifier",
+      "sessions": "extra_trees_regressor"
     },
     "mlflow_run_id": "....",
     "model_name": "whale_move_forecaster",
@@ -168,6 +178,13 @@ Kiểm tra:
 ```bash
 curl -s http://localhost:8090/health | jq
 curl -s http://localhost:8090/model/info | jq
+```
+
+Kiểm tra winner đã lên production:
+
+```bash
+curl -s http://localhost:8090/model/info \
+  | jq '.data | {selected_models, model_version, model_source, mlflow_run_id}'
 ```
 
 ## 6) Biến môi trường quan trọng
@@ -204,4 +221,6 @@ DAG verify bắt buộc sau train:
 
 - `mlflow_run_id` có giá trị
 - `model_version` có giá trị
+- `selected_models.direction` có giá trị
+- `selected_models.sessions` có giá trị
 - model ở trạng thái ready cho serving

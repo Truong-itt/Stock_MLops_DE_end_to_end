@@ -15,9 +15,15 @@ import mlflow
 import numpy as np
 import pandas as pd
 from mlflow.tracking import MlflowClient
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import (
+    ExtraTreesRegressor,
+    GradientBoostingClassifier,
+    GradientBoostingRegressor,
+    RandomForestClassifier,
+    RandomForestRegressor,
+)
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, mean_absolute_error, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error, mean_squared_error, roc_auc_score
 from sklearn.model_selection import train_test_split
 
 
@@ -483,6 +489,11 @@ class WhaleMoveForecaster:
             if self.bundle is None:
                 return {"ready": False}
             meta = dict(self.bundle.get("meta", {}))
+            selected_models = dict(meta.get("selected_models", {}))
+            selected_models.setdefault("direction", self.bundle.get("classifier_name"))
+            selected_models.setdefault("sessions", self.bundle.get("regressor_name"))
+            if selected_models.get("direction") or selected_models.get("sessions"):
+                meta["selected_models"] = selected_models
             meta["ready"] = True
             meta["feature_names"] = list(self.bundle.get("feature_names", FEATURE_NAMES))
             meta["model_source"] = meta.get("model_source", self.model_source or "local")
@@ -490,6 +501,195 @@ class WhaleMoveForecaster:
             if "model_version" not in meta:
                 meta["model_version"] = meta.get("version")
             return meta
+
+    @staticmethod
+    def _safe_metric_value(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            casted = float(value)
+        except Exception:
+            return None
+        if not np.isfinite(casted):
+            return None
+        return casted
+
+    @staticmethod
+    def _metric_token(text: str) -> str:
+        raw = "".join(ch if ch.isalnum() else "_" for ch in str(text).lower()).strip("_")
+        return raw or "metric"
+
+    def _build_classifier_candidates(self) -> Dict[str, Any]:
+        return {
+            "logistic_regression": LogisticRegression(
+                max_iter=500,
+                class_weight="balanced",
+                random_state=42,
+            ),
+            "random_forest_classifier": RandomForestClassifier(
+                n_estimators=240,
+                max_depth=12,
+                min_samples_leaf=6,
+                class_weight="balanced_subsample",
+                random_state=42,
+                n_jobs=-1,
+            ),
+            "gradient_boosting_classifier": GradientBoostingClassifier(
+                n_estimators=220,
+                learning_rate=0.05,
+                max_depth=3,
+                random_state=42,
+            ),
+        }
+
+    def _build_regressor_candidates(self) -> Dict[str, Any]:
+        return {
+            "random_forest_regressor": RandomForestRegressor(
+                n_estimators=180,
+                max_depth=10,
+                min_samples_leaf=8,
+                random_state=42,
+                n_jobs=-1,
+            ),
+            "extra_trees_regressor": ExtraTreesRegressor(
+                n_estimators=240,
+                max_depth=12,
+                min_samples_leaf=5,
+                random_state=42,
+                n_jobs=-1,
+            ),
+            "gradient_boosting_regressor": GradientBoostingRegressor(
+                n_estimators=220,
+                learning_rate=0.05,
+                max_depth=3,
+                random_state=42,
+            ),
+        }
+
+    def _evaluate_classifier_candidate(
+        self,
+        name: str,
+        model: Any,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_test: np.ndarray,
+        y_test: np.ndarray,
+    ) -> Dict[str, Any]:
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        accuracy = self._safe_metric_value(accuracy_score(y_test, y_pred))
+        f1 = self._safe_metric_value(f1_score(y_test, y_pred, zero_division=0))
+        roc_auc: Optional[float] = None
+
+        if hasattr(model, "predict_proba"):
+            try:
+                y_prob = model.predict_proba(X_test)
+                classes = np.asarray(getattr(model, "classes_", []))
+                up_positions = np.where(classes == 1)[0] if classes.size else np.asarray([])
+                up_index = int(up_positions[0]) if len(up_positions) else (1 if y_prob.shape[1] > 1 else 0)
+                roc_auc = self._safe_metric_value(roc_auc_score(y_test, y_prob[:, up_index]))
+            except Exception:
+                roc_auc = None
+
+        score = roc_auc if roc_auc is not None else accuracy
+        if score is None:
+            raise RuntimeError(f"Classifier candidate '{name}' produced invalid evaluation score.")
+
+        return {
+            "name": name,
+            "selection_metric": "roc_auc" if roc_auc is not None else "accuracy",
+            "score": float(score),
+            "metrics": {
+                "accuracy": accuracy,
+                "roc_auc": roc_auc,
+                "f1_direction": f1,
+            },
+            "model": model,
+        }
+
+    def _evaluate_regressor_candidate(
+        self,
+        name: str,
+        model: Any,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_test: np.ndarray,
+        y_test: np.ndarray,
+        horizon: int,
+    ) -> Dict[str, Any]:
+        model.fit(X_train, y_train)
+        y_pred = np.clip(model.predict(X_test), 1.0, float(horizon))
+
+        mae = self._safe_metric_value(mean_absolute_error(y_test, y_pred))
+        rmse = self._safe_metric_value(np.sqrt(mean_squared_error(y_test, y_pred)))
+        score = None if mae is None else float(-mae)
+        if score is None:
+            raise RuntimeError(f"Regressor candidate '{name}' produced invalid evaluation score.")
+
+        return {
+            "name": name,
+            "selection_metric": "neg_mae",
+            "score": score,
+            "metrics": {
+                "mae_sessions": mae,
+                "rmse_sessions": rmse,
+            },
+            "model": model,
+        }
+
+    @staticmethod
+    def _classifier_rank_key(candidate: Dict[str, Any]) -> Tuple[float, float]:
+        metrics = candidate.get("metrics", {})
+        score = candidate.get("score")
+        accuracy = metrics.get("accuracy")
+        return (
+            float(score) if score is not None else float("-inf"),
+            float(accuracy) if accuracy is not None else float("-inf"),
+        )
+
+    @staticmethod
+    def _regressor_rank_key(candidate: Dict[str, Any]) -> Tuple[float, float]:
+        metrics = candidate.get("metrics", {})
+        score = candidate.get("score")
+        mae = metrics.get("mae_sessions")
+        return (
+            float(score) if score is not None else float("-inf"),
+            float(-mae) if mae is not None else float("-inf"),
+        )
+
+    @staticmethod
+    def _candidate_to_meta(candidate: Dict[str, Any]) -> Dict[str, Any]:
+        metrics = {
+            key: (None if value is None else float(value))
+            for key, value in dict(candidate.get("metrics", {})).items()
+        }
+        return {
+            "name": str(candidate.get("name")),
+            "selection_metric": str(candidate.get("selection_metric")),
+            "score": float(candidate.get("score")),
+            "metrics": metrics,
+        }
+
+    def _flatten_candidate_metrics_for_mlflow(
+        self,
+        prefix: str,
+        candidates: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        payload: Dict[str, float] = {}
+        for candidate in candidates:
+            candidate_name = self._metric_token(str(candidate.get("name")))
+            candidate_score = candidate.get("score")
+            if candidate_score is not None:
+                payload[f"{prefix}_{candidate_name}_score"] = float(candidate_score)
+            metrics = dict(candidate.get("metrics", {}))
+            for metric_name, metric_value in metrics.items():
+                if metric_value is None:
+                    continue
+                payload[
+                    f"{prefix}_{candidate_name}_{self._metric_token(str(metric_name))}"
+                ] = float(metric_value)
+        return payload
 
     def _wait_until_model_version_ready(
         self,
@@ -637,37 +837,84 @@ class WhaleMoveForecaster:
                 stratify=stratify,
             )
 
-            classifier = LogisticRegression(max_iter=500, class_weight="balanced", random_state=42)
-            classifier.fit(X_train, y_dir_train)
+            classifier_candidates = self._build_classifier_candidates()
+            regressor_candidates = self._build_regressor_candidates()
 
-            regressor = RandomForestRegressor(
-                n_estimators=180,
-                max_depth=10,
-                min_samples_leaf=8,
-                random_state=42,
-                n_jobs=-1,
+            if len(classifier_candidates) < 3:
+                raise RuntimeError("At least 3 classifier candidates are required.")
+            if len(regressor_candidates) < 3:
+                raise RuntimeError("At least 3 regressor candidates are required.")
+
+            classifier_results: List[Dict[str, Any]] = []
+            for name, candidate in classifier_candidates.items():
+                classifier_results.append(
+                    self._evaluate_classifier_candidate(
+                        name=name,
+                        model=candidate,
+                        X_train=X_train,
+                        y_train=y_dir_train,
+                        X_test=X_test,
+                        y_test=y_dir_test,
+                    )
+                )
+
+            regressor_results: List[Dict[str, Any]] = []
+            for name, candidate in regressor_candidates.items():
+                regressor_results.append(
+                    self._evaluate_regressor_candidate(
+                        name=name,
+                        model=candidate,
+                        X_train=X_train,
+                        y_train=y_sess_train,
+                        X_test=X_test,
+                        y_test=y_sess_test,
+                        horizon=max_h,
+                    )
+                )
+
+            best_classifier = max(classifier_results, key=self._classifier_rank_key)
+            best_regressor = max(regressor_results, key=self._regressor_rank_key)
+
+            classifier = best_classifier["model"]
+            regressor = best_regressor["model"]
+
+            logger.info(
+                "Selected direction model=%s (score=%.6f via %s), sessions model=%s (score=%.6f via %s)",
+                best_classifier["name"],
+                best_classifier["score"],
+                best_classifier["selection_metric"],
+                best_regressor["name"],
+                best_regressor["score"],
+                best_regressor["selection_metric"],
             )
-            regressor.fit(X_train, y_sess_train)
-
-            y_dir_pred = classifier.predict(X_test)
-            y_dir_prob = classifier.predict_proba(X_test)
-            up_index = int(np.where(classifier.classes_ == 1)[0][0])
-            y_up_prob = y_dir_prob[:, up_index]
-            y_sess_pred = np.clip(regressor.predict(X_test), 1.0, float(max_h))
-
-            auc = None
-            try:
-                auc = float(roc_auc_score(y_dir_test, y_up_prob))
-            except Exception:
-                auc = None
 
             metrics = {
-                "accuracy": float(accuracy_score(y_dir_test, y_dir_pred)),
-                "roc_auc": auc,
-                "mae_sessions": float(mean_absolute_error(y_sess_test, y_sess_pred)),
+                "accuracy": best_classifier["metrics"].get("accuracy"),
+                "roc_auc": best_classifier["metrics"].get("roc_auc"),
+                "f1_direction": best_classifier["metrics"].get("f1_direction"),
+                "mae_sessions": best_regressor["metrics"].get("mae_sessions"),
+                "rmse_sessions": best_regressor["metrics"].get("rmse_sessions"),
+                "classifier_score": best_classifier["score"],
+                "regressor_score": best_regressor["score"],
             }
 
             up_ratio = float(np.mean(y_dir))
+            classifier_leaderboard = [
+                self._candidate_to_meta(candidate)
+                for candidate in sorted(
+                    classifier_results,
+                    key=self._classifier_rank_key,
+                    reverse=True,
+                )
+            ]
+            regressor_leaderboard = [
+                self._candidate_to_meta(candidate)
+                for candidate in sorted(
+                    regressor_results,
+                    key=self._regressor_rank_key,
+                    reverse=True,
+                )
+            ]
             meta = {
                 "trained_at": datetime.now(tz=timezone.utc).isoformat(),
                 "samples": int(len(X)),
@@ -676,12 +923,22 @@ class WhaleMoveForecaster:
                 "horizon_sessions": max_h,
                 "up_ratio": up_ratio,
                 "metrics": metrics,
+                "selected_models": {
+                    "direction": best_classifier["name"],
+                    "sessions": best_regressor["name"],
+                },
+                "model_candidates": {
+                    "direction": classifier_leaderboard,
+                    "sessions": regressor_leaderboard,
+                },
                 "version": datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S"),
             }
 
             bundle = {
                 "classifier": classifier,
                 "regressor": regressor,
+                "classifier_name": best_classifier["name"],
+                "regressor_name": best_regressor["name"],
                 "feature_names": list(FEATURE_NAMES),
                 "meta": dict(meta),
             }
@@ -694,6 +951,19 @@ class WhaleMoveForecaster:
 
             mlflow_meta: Dict[str, Any] = {}
             mlflow_error: Optional[str] = None
+            mlflow_metrics = dict(metrics)
+            mlflow_metrics.update(
+                self._flatten_candidate_metrics_for_mlflow(
+                    prefix="classifier",
+                    candidates=classifier_results,
+                )
+            )
+            mlflow_metrics.update(
+                self._flatten_candidate_metrics_for_mlflow(
+                    prefix="regressor",
+                    candidates=regressor_results,
+                )
+            )
             with tempfile.TemporaryDirectory(prefix="whale_ml_train_") as temp_dir:
                 temp_bundle_path = Path(temp_dir) / "whale_move_model.joblib"
                 joblib.dump(bundle, temp_bundle_path)
@@ -701,7 +971,7 @@ class WhaleMoveForecaster:
                     mlflow_meta = self._log_train_to_mlflow(
                         temp_bundle_path,
                         train_params=train_params,
-                        metrics=metrics,
+                        metrics=mlflow_metrics,
                         base_meta=meta,
                     )
                 except Exception as exc:

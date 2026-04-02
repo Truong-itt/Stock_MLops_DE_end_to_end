@@ -533,17 +533,11 @@ $$
 y_{\text{sess}}=\min(H,\text{consecutive same-sign sessions})
 $$
 
-- Xác suất hướng từ Logistic Regression:
-
-$$
-P(\text{up}\mid x)=\sigma(w^\top x+b),\quad P(\text{down})=1-P(\text{up})
-$$
-
-- Số phiên dự báo từ RandomForestRegressor:
-
-$$
-\hat{s}=f_{\text{RF}}(x),\quad \hat{s}\in[1,H]
-$$
+- Direction models: `logistic_regression`, `random_forest_classifier`, `gradient_boosting_classifier`.
+- Sessions models: `random_forest_regressor`, `extra_trees_regressor`, `gradient_boosting_regressor`.
+- Auto-selection:
+  - direction chọn score cao nhất theo `ROC-AUC` (fallback `Accuracy`)
+  - sessions chọn score cao nhất theo `-MAE` (MAE thấp nhất)
 
 Chi tiết đầy đủ xem:
 
@@ -558,16 +552,17 @@ Chi tiết đầy đủ xem:
 1. Dữ liệu train lấy từ ClickHouse:
    - `stock_changepoint_events`
    - `v_ohlcv_daily`
-2. Whale ML train classifier + regressor.
-3. Log MLflow run: params, metrics, artifacts.
-4. Register model vào MLflow Registry:
+2. Whale ML train 3 classifier + 3 regressor.
+3. Tự chấm điểm trên test set và chọn winner cho từng task.
+4. Log MLflow run: params, metrics, leaderboard, artifacts.
+5. Register model vào MLflow Registry:
    - model name: `whale_move_forecaster`
-   - alias serving: `production`
-5. Airflow DAG điều phối retrain:
+   - alias serving: `production` (auto cập nhật về winner mới)
+6. Airflow DAG điều phối retrain:
    - `whale_ml_retrain_pipeline`
    - chuẩn `dag_run.conf`: `lookback_days`, `max_rows`, `horizon`, `timeout_seconds`
-6. Web backend gọi `predict-batch` để enrich alert BOCPD.
-7. Frontend hiển thị: hướng dự báo, xác suất lên/xuống, số phiên kỳ vọng.
+7. Web backend gọi `predict-batch` để enrich alert BOCPD.
+8. Frontend hiển thị: hướng dự báo, xác suất lên/xuống, số phiên kỳ vọng.
 
 ### API của Whale ML service
 

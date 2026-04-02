@@ -118,6 +118,11 @@ def verify_model_ready(**_: Any) -> Dict[str, Any]:
         raise RuntimeError(f"Model does not expose mlflow_run_id: {response}")
     if not model_data.get("model_version"):
         raise RuntimeError(f"Model does not expose model_version: {response}")
+    selected_models = model_data.get("selected_models") or {}
+    if not selected_models.get("direction"):
+        raise RuntimeError(f"Model does not expose selected direction model: {response}")
+    if not selected_models.get("sessions"):
+        raise RuntimeError(f"Model does not expose selected sessions model: {response}")
     return response
 
 

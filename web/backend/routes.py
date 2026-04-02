@@ -622,7 +622,8 @@ async def _attach_ml_forecast(alerts):
             "predicted": len(prediction_map),
             "up_forecast_count": up_count,
             "down_forecast_count": down_count,
-            "model_version": model_info.get("version"),
+            "model_version": model_info.get("model_version", model_info.get("version")),
+            "selected_models": model_info.get("selected_models"),
             "trained_at": model_info.get("trained_at"),
         }
         return enriched, summary
