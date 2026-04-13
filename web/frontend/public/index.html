@@ -10,7 +10,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/css/style.css?v=20260324b" />
+  <link rel="stylesheet" href="/css/style.css?v=20260413g" />
   <script>
     /* ── Theme: runs before paint to avoid FOUC ── */
     (function(){
@@ -320,6 +320,33 @@
 
 </main>
 
+<!-- ═══ EXTERNAL PRICE CHART DOCK ═══════════════════════════ -->
+<section class="chart-dock" id="chartDock">
+  <div class="chart-dock-bar">
+    <span class="chart-title" id="dockChartTitle">Biểu đồ realtime</span>
+    <div class="chart-tools">
+      <div class="chart-mode-switch" id="dockChartMode" role="group" aria-label="Che do bieu do">
+        <button type="button" class="chart-mode-btn active" data-mode="line">Realtime</button>
+        <button type="button" class="chart-mode-btn" data-mode="candlestick">Nến</button>
+      </div>
+      <select id="dockInterval">
+        <option value="1m" selected>1 phút</option>
+        <option value="5m">5 phút</option>
+        <option value="1h">1 giờ</option>
+        <option value="3h">3 giờ</option>
+        <option value="6h">6 giờ</option>
+        <option value="15d">15 ngày</option>
+        <option value="1mo">1 tháng</option>
+        <option value="6mo">6 tháng</option>
+        <option value="1y">1 năm</option>
+      </select>
+    </div>
+  </div>
+  <div class="chart-dock-ranges" id="dockRunlengthStrip"></div>
+  <div class="chart-dock-wrap"><canvas id="dockChart"></canvas></div>
+  <div class="candle-info-panel hidden" id="dockCandleInfo"></div>
+</section>
+
 <!-- ═══ DETAIL DRAWER ════════════════════════════════════════ -->
 <aside class="drawer" id="drawer">
   <div class="drawer-header">
@@ -343,19 +370,26 @@
     <div class="chart-section">
       <div class="chart-bar">
         <span class="chart-title" id="drChartTitle">Biểu đồ giá</span>
-        <select id="drInterval">
-          <option value="1m" selected>1 phút</option>
-          <option value="5m">5 phút</option>
-          <option value="1h">1 giờ</option>
-          <option value="3h">3 giờ</option>
-          <option value="6h">6 giờ</option>
-          <option value="15d">15 ngày</option>
-          <option value="1mo">1 tháng</option>
-          <option value="6mo">6 tháng</option>
-          <option value="1y">1 năm</option>
-        </select>
+        <div class="chart-tools">
+          <div class="chart-mode-switch" id="drChartMode" role="group" aria-label="Che do bieu do">
+            <button type="button" class="chart-mode-btn active" data-mode="line">Realtime</button>
+            <button type="button" class="chart-mode-btn" data-mode="candlestick">Nến</button>
+          </div>
+          <select id="drInterval">
+            <option value="1m" selected>1 phút</option>
+            <option value="5m">5 phút</option>
+            <option value="1h">1 giờ</option>
+            <option value="3h">3 giờ</option>
+            <option value="6h">6 giờ</option>
+            <option value="15d">15 ngày</option>
+            <option value="1mo">1 tháng</option>
+            <option value="6mo">6 tháng</option>
+            <option value="1y">1 năm</option>
+          </select>
+        </div>
       </div>
       <div class="chart-wrap"><canvas id="drChart"></canvas></div>
+      <div class="candle-info-panel hidden" id="drCandleInfo"></div>
     </div>
 
     <!-- BOCPD / Changepoint -->
@@ -488,6 +522,6 @@
 <!-- ═══ SCRIPTS ══════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script src="/js/app.js?v=20260324b"></script>
+  <script src="/js/app.js?v=20260413g"></script>
 </body>
 </html>

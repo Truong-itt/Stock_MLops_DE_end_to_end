@@ -1,0 +1,47 @@
+## 13) Gợi ý tuning để thực chiến
+
+1. Muốn giảm báo động giả:
+   - Tăng `BOCPD_HAZARD_LAMBDA`.
+
+2. Muốn bắt regime change sớm hơn:
+   - Giảm `BOCPD_HAZARD_LAMBDA`.
+
+3. Muốn tiết kiệm tài nguyên:
+   - Giảm `BOCPD_MAX_RUN_LENGTH`.
+
+4. Muốn giữ ngữ cảnh dài hơn:
+   - Tăng `BOCPD_MAX_RUN_LENGTH` và theo dõi CPU/RAM.
+
+
+## 12) Tình huống dễ gặp và cách hiểu đúng
+
+1. `cp_prob` thấp nhưng `innovation_zscore` cao:
+   - Có thể là spike đơn lẻ, chưa đủ bằng chứng đổi chế độ.
+
+2. `cp_prob` tăng liên tục vài điểm:
+   - Khả năng chuyển pha đang hình thành.
+
+3. Bootstrapped ít bản ghi:
+   - Có thể dữ liệu lịch sử `stock_prices` còn mỏng.
+
+4. Worker không emit kết quả live cho một mã:
+   - Có thể chưa có cặp giá hợp lệ để tính return.
+   - Hoặc bản ghi mới trùng hệt bản ghi đã xử lý.
+
+---
+
+
+
+### Bước 5: Kiểm tra dữ liệu output
+
+Scylla kiểm tra nhanh:
+
+- `stock_changepoint_latest` có record theo mã.
+- `stock_changepoint_history` có lịch sử.
+
+ClickHouse kiểm tra nhanh:
+
+- `stock_changepoint_events` tăng dần theo thời gian.
+- `v_changepoint_latest` trả bản ghi mới nhất mỗi mã.
+
+---

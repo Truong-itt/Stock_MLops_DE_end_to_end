@@ -7,6 +7,7 @@ from decimal import Decimal
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List, Set
 from database import db
+from symbol_registry import SymbolRegistry
 
 try:
     from cassandra.util import Date as CassDate
@@ -67,6 +68,42 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+registry = SymbolRegistry()
+
+
+def _build_daily_map(rows: List[dict]) -> Dict[str, dict]:
+    """Keep only the latest daily row per symbol."""
+    daily_map: Dict[str, dict] = {}
+    for row in rows:
+        sym = row["symbol"]
+        if sym not in daily_map:
+            daily_map[sym] = row
+            continue
+        existing_date = daily_map[sym].get("trade_date")
+        new_date = row.get("trade_date")
+        if new_date and existing_date and str(new_date) > str(existing_date):
+            daily_map[sym] = row
+    return daily_map
+
+
+def _placeholder_row(symbol: str) -> dict:
+    """Create a stable placeholder for symbols not yet populated in Scylla."""
+    return {
+        "symbol": symbol,
+        "price": None,
+        "change": 0,
+        "change_percent": 0,
+        "open": None,
+        "high": None,
+        "low": None,
+        "day_volume": None,
+        "vwap": None,
+        "exchange": registry.get_market_for_symbol(symbol) or "",
+        "timestamp": None,
+        "market_hours": None,
+        "quote_type": None,
+        "is_placeholder": True,
+    }
 
 
 def _fetch_merged_data() -> tuple[List[dict], str]:
@@ -85,23 +122,20 @@ def _fetch_merged_data() -> tuple[List[dict], str]:
         "change, change_percent, vwap, exchange "
         "FROM stock_daily_summary"
     ))
+    registry_symbols = set(registry.get_all_symbols())
+    if registry_symbols:
+        latest_rows = [row for row in latest_rows if row.get("symbol") in registry_symbols]
+        daily_rows = [row for row in daily_rows if row.get("symbol") in registry_symbols]
 
-    # Build daily lookup — keep only the LATEST trade_date per symbol
-    daily_map: Dict[str, dict] = {}
-    for r in daily_rows:
-        sym = r["symbol"]
-        if sym not in daily_map:
-            daily_map[sym] = r
-        else:
-            # Keep the row with the more recent trade_date
-            existing_date = daily_map[sym].get("trade_date")
-            new_date = r.get("trade_date")
-            if new_date and existing_date and str(new_date) > str(existing_date):
-                daily_map[sym] = r
+    daily_map = _build_daily_map(daily_rows)
 
     if not latest_rows:
-        # No real-time data at all → pure daily
-        return daily_rows, "daily"
+        merged = list(daily_rows)
+        seen = {row.get("symbol") for row in merged if row.get("symbol")}
+        for sym in registry.get_all_symbols():
+            if sym not in seen:
+                merged.append(_placeholder_row(sym))
+        return merged, "daily"
 
     # Merge: use latest if price exists, otherwise fill from daily
     merged: List[dict] = []
@@ -132,6 +166,12 @@ def _fetch_merged_data() -> tuple[List[dict], str]:
     for sym, r in daily_map.items():
         if sym not in seen:
             merged.append(r)
+
+    # Keep WS payload shape consistent with REST /stocks/latest.
+    for sym in registry.get_all_symbols():
+        if sym in seen or sym in daily_map:
+            continue
+        merged.append(_placeholder_row(sym))
 
     return merged, "merged"
 
