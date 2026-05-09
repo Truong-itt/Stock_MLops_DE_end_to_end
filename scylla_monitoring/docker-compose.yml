@@ -60,7 +60,7 @@ services:
     container_name: loki
     image: grafana/loki:2.9.4
     command:
-    - --config.file=/mnt/config/loki-config.yaml
+    - --config.file=/mnt/config/loki-config.compose.yaml
     ports:
     - 3100:3100
     volumes:

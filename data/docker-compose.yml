@@ -27,19 +27,6 @@ services:
     networks:
       - stock-network
 
-  news-worker:
-    container_name: news-worker
-    build: .
-    command: ["python", "-u", "news_worker.py"]
-    restart: unless-stopped
-    environment:
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - ./log:/var/log/stockraw/
-      - ../config:/app/config:rw
-    networks:
-      - stock-network
-
   sentiment-worker:
     container_name: sentiment-worker
     build:
@@ -59,34 +46,6 @@ services:
       resources:
         limits:
           memory: 4G
-
-  data-gap-tool:
-    container_name: data-gap-tool
-    build: .
-    command: ["python", "-u", "data_gap_tool.py", "audit", "--write-report"]
-    restart: "no"
-    environment:
-      - PYTHONUNBUFFERED=1
-      - SYMBOL_REGISTRY_PATH=/app/config/symbol_registry.json
-    volumes:
-      - ./log:/var/log/stockraw/
-      - ../config:/app/config:rw
-    networks:
-      - stock-network
-
-  clickhouse-sync-tool:
-    container_name: clickhouse-sync-tool
-    build: .
-    command: ["python", "-u", "clickhouse_sync_tool.py", "audit", "--write-report"]
-    restart: "no"
-    environment:
-      - PYTHONUNBUFFERED=1
-      - SYMBOL_REGISTRY_PATH=/app/config/symbol_registry.json
-    volumes:
-      - ./log:/var/log/stockraw/
-      - ../config:/app/config:rw
-    networks:
-      - stock-network
 
 volumes:
   sentiment-model-cache:

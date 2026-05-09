@@ -9,6 +9,7 @@ Chạy mỗi 5 phút, mỗi lần lấy tin mới cho tất cả symbols.
 """
 
 import hashlib
+import argparse
 import json
 import signal
 import time
@@ -307,7 +308,45 @@ def save_articles(scylla_session, articles: List[Dict], kafka_producer=None) -> 
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN LOOP
 # ═══════════════════════════════════════════════════════════════════════
-def main():
+def run_news_cycle(registry, scylla_session, kafka_producer, running_check=lambda: True):
+    """Run one full symbol crawl cycle."""
+    total_fetched = 0
+    total_inserted = 0
+    registry.reload_if_changed()
+    all_symbols = registry.get_all_symbols()
+
+    for symbol in all_symbols:
+        if not running_check():
+            break
+
+        # Thử Yahoo Finance RSS trước
+        articles = fetch_yahoo_rss(symbol)
+
+        # Bổ sung Google News nếu chưa đủ 5 tin
+        if len(articles) < 5:
+            google_articles = fetch_google_news(symbol)
+            # Loại bỏ trùng lặp bằng article_id
+            existing_ids = {a["article_id"] for a in articles}
+            for ga in google_articles:
+                if ga["article_id"] not in existing_ids:
+                    articles.append(ga)
+                    if len(articles) >= 5:
+                        break
+
+        if articles:
+            n = save_articles(scylla_session, articles, kafka_producer)
+            total_fetched += len(articles)
+            total_inserted += n
+            if n > 0:
+                logger.info("[NEWS] %s: %d fetched, %d new", symbol, len(articles), n)
+
+        # Rate limiting
+        time.sleep(1)
+
+    logger.info("[NEWS CYCLE] Total fetched=%d  new=%d", total_fetched, total_inserted)
+
+
+def main(run_once: bool = False):
     logger.info("Starting news_worker ...")
     registry = SymbolRegistry()
 
@@ -326,47 +365,27 @@ def main():
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
 
-    while running:
-        total_fetched = 0
-        total_inserted = 0
-        registry.reload_if_changed()
-        all_symbols = registry.get_all_symbols()
+    if run_once:
+        run_news_cycle(
+            registry,
+            scylla_session,
+            kafka_producer,
+            running_check=lambda: running,
+        )
+    else:
+        while running:
+            run_news_cycle(
+                registry,
+                scylla_session,
+                kafka_producer,
+                running_check=lambda: running,
+            )
 
-        for symbol in all_symbols:
-            # Thử Yahoo Finance RSS trước
-            articles = fetch_yahoo_rss(symbol)
-
-            # Bổ sung Google News nếu chưa đủ 5 tin
-            if len(articles) < 5:
-                google_articles = fetch_google_news(symbol)
-                # Loại bỏ trùng lặp bằng article_id
-                existing_ids = {a["article_id"] for a in articles}
-                for ga in google_articles:
-                    if ga["article_id"] not in existing_ids:
-                        articles.append(ga)
-                        if len(articles) >= 5:
-                            break
-
-            if articles:
-                n = save_articles(scylla_session, articles, kafka_producer)
-                total_fetched += len(articles)
-                total_inserted += n
-                if n > 0:
-                    logger.info("[NEWS] %s: %d fetched, %d new", symbol, len(articles), n)
-
-            # Rate limiting
-            time.sleep(1)
-
-            if not running:
-                break
-
-        logger.info("[NEWS CYCLE] Total fetched=%d  new=%d", total_fetched, total_inserted)
-
-        # Đợi đến lần chạy tiếp theo
-        for _ in range(POLL_INTERVAL_SEC):
-            if not running:
-                break
-            time.sleep(1)
+            # Đợi đến lần chạy tiếp theo
+            for _ in range(POLL_INTERVAL_SEC):
+                if not running:
+                    break
+                time.sleep(1)
 
     # Cleanup
     try:
@@ -380,4 +399,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="News crawler worker")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Run a single crawl cycle then exit (for Airflow cron scheduling)",
+    )
+    args = parser.parse_args()
+    main(run_once=args.once)

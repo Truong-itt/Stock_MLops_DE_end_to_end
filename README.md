@@ -237,7 +237,7 @@ Stock_MLops_DE_end_to_end/
 
 ### 🇻🇳 Cổ phiếu Việt Nam (50 mã)
 ```
-VCB, VIC, VHM, BID, TCB, CTG, VGI, ACV, FPT, HPG,
+VCB, VIC, VHM, BID, TCB, CTG, HVN, VSC, FPT, HPG,
 MBB, MSN, GVR, GAS, VNM, VPB, ACB, SSB, STB, HDB,
 SHB, LPB, VIB, MWG, BCM, PLX, SAB, POW, VJC, REE,
 GMD, TPB, VRE, VCI, SSI, HCM, DGC, PDR, KDH, NVL,

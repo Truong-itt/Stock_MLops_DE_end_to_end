@@ -10,10 +10,10 @@ services:
       - "9180:9180"
       - "8000:8000"
     command: >
-      --seeds=scylla-node1
-      --listen-address scylla-node1
+      --seeds=172.18.0.31
+      --listen-address 172.18.0.31
       --rpc-address 0.0.0.0
-      --broadcast-rpc-address scylla-node1
+      --broadcast-rpc-address 172.18.0.31
       --api-address 0.0.0.0
       --smp 1
       --memory 1024M
@@ -30,7 +30,8 @@ services:
       - SCYLLA_DC=datacenter1
       - SCYLLA_RACK=rack1
     networks:
-      - stock-network
+      stock-network:
+        ipv4_address: 172.18.0.31
     healthcheck:
       test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
       interval: 30s
@@ -47,10 +48,10 @@ services:
       - "9181:9180"
       - "8001:8000"
     command: >
-      --seeds=scylla-node1
-      --listen-address scylla-node2
+      --seeds=172.18.0.31
+      --listen-address 172.18.0.32
       --rpc-address 0.0.0.0
-      --broadcast-rpc-address scylla-node2
+      --broadcast-rpc-address 172.18.0.32
       --api-address 0.0.0.0
       --smp 1
       --memory 1024M
@@ -70,7 +71,8 @@ services:
       - SCYLLA_DC=datacenter1
       - SCYLLA_RACK=rack1
     networks:
-      - stock-network
+      stock-network:
+        ipv4_address: 172.18.0.32
     healthcheck:
       test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
       interval: 30s
@@ -88,10 +90,10 @@ services:
       - "8002:8000"
 
     command: >
-      --seeds=scylla-node1
-      --listen-address scylla-node3
+      --seeds=172.18.0.31
+      --listen-address 172.18.0.33
       --rpc-address 0.0.0.0
-      --broadcast-rpc-address scylla-node3
+      --broadcast-rpc-address 172.18.0.33
       --api-address 0.0.0.0
       --smp 1
       --memory 1024M
@@ -111,7 +113,8 @@ services:
       - SCYLLA_DC=datacenter1
       - SCYLLA_RACK=rack1
     networks:
-      - stock-network
+      stock-network:
+        ipv4_address: 172.18.0.33
     healthcheck:
       test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
       interval: 30s

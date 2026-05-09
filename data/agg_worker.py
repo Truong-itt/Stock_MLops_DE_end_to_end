@@ -18,6 +18,7 @@ import clickhouse_connect
 from cassandra.cluster import Cluster
 
 from logger import get_logger
+from symbol_registry import SymbolRegistry
 
 logger = get_logger()
 
@@ -157,7 +158,7 @@ def sync_ohlcv(ch_client, scylla_session, interval: str, view_name: str, since: 
     return count
 
 
-def sync_daily_summary(ch_client, scylla_session, since: datetime):
+def sync_daily_summary(ch_client, scylla_session, since: datetime, registry: SymbolRegistry):
     """
     Đọc OHLCV daily từ ClickHouse, ghi vào ScyllaDB stock_daily_summary.
     """
@@ -188,6 +189,8 @@ def sync_daily_summary(ch_client, scylla_session, since: datetime):
     if not rows:
         return 0
 
+    vn_symbols = set(registry.get_market_symbols("vn"))
+
     insert_cql = """
         INSERT INTO stock_daily_summary
             (symbol, trade_date, open, high, low, close, volume,
@@ -200,17 +203,20 @@ def sync_daily_summary(ch_client, scylla_session, since: datetime):
     for row in rows:
         symbol, trade_date, open_p, high_p, low_p, close_p, volume, change_pct = row
         try:
+            symbol = str(symbol).strip().upper()
             if isinstance(trade_date, str):
                 trade_date = datetime.fromisoformat(trade_date).date()
             elif hasattr(trade_date, 'date'):
                 trade_date = trade_date.date()
 
-            change_val = (close_p - open_p) if (close_p and open_p) else None
+            change_val = (close_p - open_p) if (close_p is not None and open_p is not None) else None
             vwap = (
                 ((open_p or 0) + (high_p or 0) + (low_p or 0) + (close_p or 0)) / 4
                 if all(v is not None for v in [open_p, high_p, low_p, close_p])
                 else None
             )
+
+            exchange_value = "VSE" if symbol in vn_symbols else None
 
             scylla_session.execute(prepared, (
                 symbol,
@@ -223,7 +229,7 @@ def sync_daily_summary(ch_client, scylla_session, since: datetime):
                 float(change_val)  if change_val   is not None else None,
                 float(change_pct)  if change_pct   is not None else None,
                 float(vwap)        if vwap         is not None else None,
-                None,  # exchange — không có trong ClickHouse MV
+                exchange_value,
                 None,  # quote_type
                 None,  # market_hours
             ))
@@ -242,6 +248,7 @@ def main():
 
     ch_client = connect_clickhouse()
     cluster, scylla_session = connect_scylla()
+    registry = SymbolRegistry()
 
     running = True
 
@@ -266,7 +273,8 @@ def main():
             if n > 0:
                 logger.info("[AGG] %s: synced %d rows", interval, n)
 
-        n_daily = sync_daily_summary(ch_client, scylla_session, since)
+        registry.reload_if_changed()
+        n_daily = sync_daily_summary(ch_client, scylla_session, since, registry)
         total += n_daily
         if n_daily > 0:
             logger.info("[DAILY] synced %d rows", n_daily)

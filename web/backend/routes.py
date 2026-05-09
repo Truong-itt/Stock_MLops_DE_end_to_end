@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import JSONResponse
@@ -28,6 +28,9 @@ logger = logging.getLogger("backend.routes")
 registry = SymbolRegistry()
 symbol_validation_cache = TTLCache(maxsize=512, ttl=900)
 translation_cache = TTLCache(maxsize=256, ttl=3600)
+minute_volume_cache = TTLCache(maxsize=256, ttl=75)
+daily_volume_cache = TTLCache(maxsize=256, ttl=300)
+latest_price_cache = TTLCache(maxsize=512, ttl=20)
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 VALID_QUOTE_TYPES = {"EQUITY", "ETF", "MUTUALFUND", "INDEX"}
 MYMEMORY_TRANSLATE_URL = "https://api.mymemory.translated.net/get"
@@ -309,6 +312,76 @@ def _safe_int(value, default: int = 0) -> int:
             return int(float(value))
         except Exception:
             return default
+
+
+def _positive_float_or_none(value):
+    try:
+        if value is None:
+            return None
+        f = float(value)
+        return f if f > 0 else None
+    except Exception:
+        return None
+
+
+def _is_price_scale_compatible(base_price, candidate_price, low_ratio: float = 0.2, high_ratio: float = 5.0) -> bool:
+    base = _positive_float_or_none(base_price)
+    cand = _positive_float_or_none(candidate_price)
+    if base is None or cand is None:
+        return True
+    ratio = cand / base
+    return low_ratio <= ratio <= high_ratio
+
+
+def _latest_spot_price(symbol: str):
+    sym = str(symbol or "").strip().upper()
+    if not sym:
+        return None
+
+    cached = latest_price_cache.get(sym)
+    if cached is not None:
+        return cached
+
+    rows = list(db.execute(
+        "SELECT price FROM stock_latest_prices WHERE symbol = %s",
+        [sym],
+    ))
+    price = _positive_float_or_none(rows[0].get("price")) if rows else None
+    latest_price_cache[sym] = price
+    return price
+
+
+def _ohlcv_row_price(row: dict):
+    for key in ("close", "price", "open", "high", "low"):
+        val = _positive_float_or_none(row.get(key))
+        if val is not None:
+            return val
+    return None
+
+
+def _filter_ohlcv_rows_by_scale(symbol: str, rows):
+    if not rows:
+        return rows
+
+    valid = [row for row in rows if _ohlcv_row_price(row) is not None]
+    if len(valid) < 2:
+        return valid
+
+    prices = [_ohlcv_row_price(row) for row in valid]
+    min_price = min(prices)
+    max_price = max(prices)
+    if min_price <= 0:
+        return valid
+
+    if (max_price / min_price) <= 20:
+        return valid
+
+    anchor = _latest_spot_price(symbol)
+    if anchor is None:
+        anchor = prices[-1]
+
+    near_anchor = [row for row in valid if _is_price_scale_compatible(anchor, _ohlcv_row_price(row))]
+    return near_anchor if len(near_anchor) >= 2 else valid
 
 
 def _symbol_market_sets():
@@ -739,6 +812,8 @@ async def get_latest_prices():
             seen.add(sym)
             if r.get("price") is not None:
                 d = daily_map.get(sym)
+                if d and not _is_price_scale_compatible(r.get("price"), d.get("close")):
+                    d = None
                 if d:
                     r["open"] = d.get("open")
                     r["high"] = d.get("high")
@@ -822,6 +897,275 @@ async def get_stock_ticks(
 
 
 # ────────────────────────────── Matched Orders (khớp lệnh) ──────────
+def _to_int_or_none(value):
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_tick_epoch_ms(value):
+    if value is None:
+        return -1
+
+    raw = str(value).strip()
+    if not raw:
+        return -1
+
+    if raw.isdigit():
+        iv = int(raw)
+        if iv < 10_000_000_000:
+            iv *= 1000
+        return iv
+
+    try:
+        normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return -1
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return int(dt.timestamp() * 1000)
+
+
+def _matched_sort_key(row):
+    producer_ts = _to_int_or_none(row.get("producer_timestamp"))
+    if producer_ts is not None and producer_ts > 0:
+        if producer_ts < 10_000_000_000:
+            producer_ts *= 1000
+        return producer_ts
+    return _to_tick_epoch_ms(row.get("timestamp"))
+
+
+def _row_event_minute_ms(row):
+    event_ms = _to_tick_epoch_ms(row.get("timestamp"))
+    if event_ms < 0:
+        event_ms = _to_int_or_none(row.get("producer_timestamp")) or -1
+        if event_ms > 0 and event_ms < 10_000_000_000:
+            event_ms *= 1000
+    if event_ms < 0:
+        return -1
+    return (event_ms // 60000) * 60000
+
+
+def _to_yfinance_symbol(symbol: str) -> str:
+    sym = str(symbol or "").strip().upper()
+    market = registry.get_market_for_symbol(sym)
+    if market == "vn" and "." not in sym:
+        return f"{sym}.VN"
+    return sym
+
+
+def _extract_volume_series(df):
+    if df is None or getattr(df, "empty", True):
+        return None
+
+    vol = None
+    cols = getattr(df, "columns", [])
+    if "Volume" in cols:
+        vol = df["Volume"]
+    else:
+        for col in cols:
+            if isinstance(col, tuple) and len(col) > 0 and str(col[0]).lower() == "volume":
+                vol = df[col]
+                break
+
+    if vol is None:
+        return None
+
+    # yfinance may return a single-column DataFrame when columns are multi-index.
+    if hasattr(vol, "columns"):
+        if len(vol.columns) == 0:
+            return None
+        vol = vol.iloc[:, 0]
+
+    return vol
+
+
+def _get_minute_volume_map(symbol: str):
+    sym = str(symbol or "").strip().upper()
+    if not sym:
+        return {}
+
+    cached = minute_volume_cache.get(sym)
+    if cached is not None:
+        return cached
+
+    yf_symbol = _to_yfinance_symbol(sym)
+    out = {}
+    try:
+        df = yf.download(
+            yf_symbol,
+            period="1d",
+            interval="1m",
+            progress=False,
+            threads=False,
+            auto_adjust=False,
+            prepost=True,
+        )
+        vol_series = _extract_volume_series(df)
+        if vol_series is not None:
+            for idx, val in vol_series.items():
+                vol = _to_int_or_none(val)
+                if vol is None or vol <= 0:
+                    continue
+
+                dt = idx.to_pydatetime() if hasattr(idx, "to_pydatetime") else idx
+                if not isinstance(dt, datetime):
+                    continue
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                else:
+                    dt = dt.astimezone(timezone.utc)
+
+                minute_ms = int(dt.timestamp() * 1000)
+                minute_ms = (minute_ms // 60000) * 60000
+                out[minute_ms] = vol
+    except Exception as exc:
+        logger.warning("minute-volume fallback failed for %s: %s", sym, exc)
+
+    minute_volume_cache[sym] = out
+    return out
+
+
+def _get_latest_daily_volume(symbol: str) -> int:
+    sym = str(symbol or "").strip().upper()
+    if not sym:
+        return 0
+
+    cached = daily_volume_cache.get(sym)
+    if cached is not None:
+        return int(cached)
+
+    yf_symbol = _to_yfinance_symbol(sym)
+    latest_volume = 0
+    try:
+        df = yf.download(
+            yf_symbol,
+            period="7d",
+            interval="1d",
+            progress=False,
+            threads=False,
+            auto_adjust=False,
+        )
+        vol_series = _extract_volume_series(df)
+        if vol_series is not None:
+            for value in reversed(list(vol_series.values)):
+                vol = _to_int_or_none(value)
+                if vol is not None and vol > 0:
+                    latest_volume = vol
+                    break
+    except Exception as exc:
+        logger.warning("daily-volume fallback failed for %s: %s", sym, exc)
+
+    daily_volume_cache[sym] = int(latest_volume)
+    return int(latest_volume)
+
+
+def _with_estimated_matched_size(rows, symbol: str, total_tick_count: int = None):
+    if not rows:
+        return rows
+
+    # Use estimation only when the full tick sample has no native matched size.
+    has_native_size = any((_to_int_or_none(r.get("matched_size")) or 0) > 0 for r in rows)
+    if has_native_size:
+        return rows
+
+    minute_volume = _get_minute_volume_map(symbol)
+    unresolved_indexes = []
+    for idx, row in enumerate(rows):
+        if (_to_int_or_none(row.get("matched_size")) or 0) <= 0:
+            unresolved_indexes.append(idx)
+
+    if not unresolved_indexes:
+        return rows
+
+    if not minute_volume:
+        minute_volume = {}
+
+    bucket_indexes = {}
+    for idx in unresolved_indexes:
+        row = rows[idx]
+        minute_ms = _row_event_minute_ms(row)
+        if minute_ms < 0:
+            continue
+        bucket_indexes.setdefault(minute_ms, []).append(idx)
+
+    estimated_count = 0
+    for minute_ms, idxs in bucket_indexes.items():
+        vol = _to_int_or_none(minute_volume.get(minute_ms))
+        if vol is None or vol <= 0:
+            continue
+
+        # Split minute volume across ticks in that minute.
+        base = vol // len(idxs)
+        if base <= 0:
+            base = 1
+        remaining = max(0, vol - (base * len(idxs)))
+
+        for offset, row_idx in enumerate(idxs):
+            est = base + (1 if offset < remaining else 0)
+            if est <= 0:
+                continue
+            rows[row_idx]["matched_size"] = est
+            rows[row_idx]["matched_size_source"] = "minute_volume_est"
+            estimated_count += 1
+
+    # If minute volume is unavailable, distribute latest daily volume by tick count.
+    if estimated_count == 0:
+        daily_volume = _get_latest_daily_volume(symbol)
+        if daily_volume > 0:
+            denom = _to_int_or_none(total_tick_count)
+            if denom is None or denom <= 0:
+                denom = max(1, len(rows))
+            avg_size = max(1, daily_volume // denom)
+            for idx in unresolved_indexes:
+                if (_to_int_or_none(rows[idx].get("matched_size")) or 0) > 0:
+                    continue
+                rows[idx]["matched_size"] = avg_size
+                rows[idx]["matched_size_source"] = "daily_volume_est"
+
+    return rows
+
+
+def _with_matched_size(rows):
+    """Attach matched_size per tick.
+
+    Priority:
+    - Use last_size when it is positive.
+    - Fallback to day_volume delta between adjacent ticks (newer - older).
+    """
+    out = []
+    for idx, row in enumerate(rows):
+        item = dict(row)
+
+        last_size = _to_int_or_none(item.get("last_size"))
+        if last_size is not None and last_size > 0:
+            item["matched_size"] = last_size
+            item["matched_size_source"] = "last_size"
+            out.append(item)
+            continue
+
+        matched_size = 0
+        cur_day_volume = _to_int_or_none(item.get("day_volume"))
+        next_day_volume = None
+        if idx + 1 < len(rows):
+            next_day_volume = _to_int_or_none(rows[idx + 1].get("day_volume"))
+
+        if cur_day_volume is not None and next_day_volume is not None:
+            delta = cur_day_volume - next_day_volume
+            if delta > 0:
+                matched_size = delta
+
+        item["matched_size"] = matched_size
+        item["matched_size_source"] = "day_volume_delta" if matched_size > 0 else "missing"
+        out.append(item)
+    return out
+
+
 @router.get("/stocks/matched-orders/{symbol}")
 async def get_matched_orders(
     symbol: str,
@@ -830,27 +1174,31 @@ async def get_matched_orders(
     """Lấy lệnh khớp gần nhất từ stock_prices (tick-level)."""
     try:
         sym = symbol.upper()
+        fetch_limit = min(max(limit * 4, 200), 2000)
         rows = list(db.execute(
-            "SELECT timestamp, price, last_size, change, change_percent "
+            "SELECT timestamp, producer_timestamp, price, last_size, day_volume, change, change_percent "
             "FROM stock_prices WHERE symbol = %s LIMIT %s",
-            [sym, limit],
+            [sym, fetch_limit],
         ))
-        # Total count (approximate)
         count_rows = list(db.execute(
             "SELECT COUNT(*) as cnt FROM stock_prices WHERE symbol = %s",
             [sym],
         ))
         total = count_rows[0]["cnt"] if count_rows else len(rows)
+        rows.sort(key=_matched_sort_key, reverse=True)
+        rows = _with_matched_size(rows)
+        rows = _with_estimated_matched_size(rows, sym, total_tick_count=total)
+        rows = rows[:limit]
         return {"status": "ok", "data": _serialise(rows), "total_count": total}
     except Exception as e:
         logger.error(f"get_matched_orders({symbol}): {e}")
         raise HTTPException(500, detail=str(e))
 
 
-def _find_ohlcv(symbol: str, interval: str, bucket_date: str = None):
+def _find_ohlcv(symbol: str, interval: str, bucket_date: str = None, lookback_days: int = 6):
     """
     Query OHLCV cho interval intraday (1m, 5m, 1h, 3h, 6h).
-    Tự tìm ngày gần nhất nếu không chỉ định bucket_date.
+    Nếu không chỉ định bucket_date thì gom liên tục nhiều ngày gần nhất.
     """
     sym = symbol.upper()
     if bucket_date:
@@ -858,22 +1206,25 @@ def _find_ohlcv(symbol: str, interval: str, bucket_date: str = None):
             "SELECT * FROM stock_prices_agg WHERE symbol=%s AND bucket_date=%s AND interval=%s",
             [sym, bucket_date, interval],
         ))
-    # Thử today → lùi tối đa 5 ngày (bỏ qua weekend/holiday)
+
+    # Gom today → lùi N ngày để frontend có thể pan trái xem dữ liệu cũ liên tục.
+    max_days = max(1, int(lookback_days))
+    merged_rows = []
     from datetime import timedelta
-    for offset in range(6):
+    for offset in range(max_days):
         d = date.today() - timedelta(days=offset)
         rows = list(db.execute(
             "SELECT * FROM stock_prices_agg WHERE symbol=%s AND bucket_date=%s AND interval=%s",
             [sym, str(d), interval],
         ))
         if rows:
-            return rows
-    return []
+            merged_rows.extend(rows)
+    return merged_rows
 
 
 def _find_daily_ohlcv(symbol: str, days: int):
     """
-    Query OHLCV daily cho interval dài hạn (15d, 1mo, 6mo, 1y).
+    Query OHLCV daily cho interval dài hạn (1d, 1w, 1mo, 3mo, 1y, 5y).
     Trả về N ngày gần nhất từ stock_daily_summary.
     """
     sym = symbol.upper()
@@ -906,45 +1257,138 @@ def _sort_ohlcv_rows(rows):
     return sorted(rows, key=_key)
 
 
+def _ohlcv_row_date(item):
+    value = item.get("ts") or item.get("bucket") or item.get("trade_date") or item.get("bucket_date")
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    raw = raw.split("T", 1)[0].split(" ", 1)[0]
+    try:
+        return date.fromisoformat(raw)
+    except Exception:
+        return None
+
+
+def _ohlcv_day_span(rows) -> int:
+    days = [_ohlcv_row_date(row) for row in (rows or [])]
+    days = [d for d in days if d is not None]
+    if not days:
+        return 0
+    return (max(days) - min(days)).days + 1
+
+
+def _has_intraday_history_window(rows, min_points: int = 12, min_day_span: int = 2) -> bool:
+    if not rows:
+        return False
+    if len(rows) < min_points:
+        return False
+    return _ohlcv_day_span(rows) >= min_day_span
+
+
 def _resolve_ohlcv(symbol: str, interval: str, bucket_date: Optional[str] = None):
-    requested = interval
-    intraday_candidates = {
-        "1m": ["1m", "5m", "1h", "3h", "6h", "15d"],
-        "5m": ["5m", "1m", "1h", "3h", "6h", "15d"],
-        "1h": ["1h", "3h", "6h", "5m", "1m", "15d"],
-        "3h": ["3h", "1h", "6h", "5m", "1m", "15d"],
-        "6h": ["6h", "3h", "1h", "5m", "1m", "15d"],
+    requested = (interval or "1d").lower().strip()
+
+    # Kế hoạch theo preset range mới của UI.
+    preset_plans = {
+        "1d": [
+            {"type": "intraday", "interval": "5m", "lookback_days": 10},
+            {"type": "intraday", "interval": "1h", "lookback_days": 30},
+            {"type": "daily", "days": 30},
+        ],
+        "1w": [
+            {"type": "intraday", "interval": "1h", "lookback_days": 45},
+            {"type": "intraday", "interval": "3h", "lookback_days": 90},
+            {"type": "daily", "days": 90},
+        ],
+        "1mo": [
+            {"type": "intraday", "interval": "6h", "lookback_days": 180},
+            {"type": "daily", "days": 180},
+        ],
+        "3mo": [
+            {"type": "daily", "days": 365},
+            {"type": "daily", "days": 180},
+        ],
+        "1y": [
+            {"type": "daily", "days": 730},
+            {"type": "daily", "days": 365},
+        ],
+        "5y": [
+            {"type": "daily", "days": 1825},
+            {"type": "daily", "days": 1095},
+            {"type": "daily", "days": 730},
+        ],
     }
-    daily_candidates = {
-        "15d": ["15d", "1mo", "6mo", "1y"],
-        "1mo": ["1mo", "15d", "6mo", "1y"],
-        "6mo": ["6mo", "1mo", "1y", "15d"],
-        "1y": ["1y", "6mo", "1mo", "15d"],
+
+    # Tương thích client cũ (nếu còn gửi interval cũ).
+    intraday_fallbacks = {
+        "1m": ["1m", "5m", "1h", "3h", "6h"],
+        "5m": ["5m", "1m", "1h", "3h", "6h"],
+        "1h": ["1h", "3h", "6h", "5m", "1m"],
+        "3h": ["3h", "1h", "6h", "5m", "1m"],
+        "6h": ["6h", "3h", "1h", "5m", "1m"],
     }
-    daily_lengths = {
+    daily_alias = {
         "15d": 15,
-        "1mo": 30,
         "6mo": 180,
-        "1y": 365,
     }
 
-    if requested in daily_candidates:
-        candidates = daily_candidates[requested]
+    if requested in preset_plans:
+        candidates = preset_plans[requested]
+    elif requested in daily_alias:
+        candidates = [{"type": "daily", "days": daily_alias[requested]}]
+    elif requested in intraday_fallbacks:
+        candidates = [
+            {"type": "intraday", "interval": iv, "lookback_days": 20}
+            for iv in intraday_fallbacks[requested]
+        ] + [{"type": "daily", "days": 30}]
     else:
-        candidates = intraday_candidates.get(requested, [requested, "1h", "15d"])
+        candidates = [
+            {"type": "intraday", "interval": "1h", "lookback_days": 30},
+            {"type": "daily", "days": 30},
+        ]
 
-    for candidate in candidates:
-        if candidate in daily_lengths:
-            rows = _find_daily_ohlcv(symbol, daily_lengths[candidate])
+    for idx, candidate in enumerate(candidates):
+        if candidate["type"] == "daily":
+            rows = _find_daily_ohlcv(symbol, candidate["days"])
+            source_interval = "1d"
         else:
-            rows = _find_ohlcv(symbol, candidate, bucket_date)
+            rows = _find_ohlcv(
+                symbol,
+                candidate["interval"],
+                bucket_date=bucket_date,
+                lookback_days=candidate.get("lookback_days", 6),
+            )
+            source_interval = candidate["interval"]
+
         rows = _sort_ohlcv_rows(rows)
+        rows = _filter_ohlcv_rows_by_scale(symbol, rows)
         if rows:
+            # For 1d view, avoid returning only "today" intraday slice.
+            # If not enough span, continue fallback to sources with broader history.
+            if (
+                requested == "1d"
+                and candidate["type"] == "intraday"
+                and bucket_date is None
+                and not _has_intraday_history_window(rows)
+            ):
+                continue
+
             return rows, {
                 "requested_interval": requested,
-                "resolved_interval": candidate,
-                "fallback_used": candidate != requested,
+                "resolved_interval": requested,
+                "fallback_used": idx > 0,
                 "points": len(rows),
+                "source_interval": source_interval,
+                "source_type": candidate["type"],
             }
 
     return [], {
@@ -959,7 +1403,7 @@ def _resolve_ohlcv(symbol: str, interval: str, bucket_date: Optional[str] = None
 @router.get("/stocks/ohlcv/{symbol}")
 async def get_ohlcv(
     symbol: str,
-    interval: str = Query(default="1m"),
+    interval: str = Query(default="1d"),
     bucket_date: Optional[str] = Query(default=None),
 ):
     try:
@@ -1235,6 +1679,8 @@ async def get_market_overview():
             price = r.get("price")
             vol = r.get("day_volume") or 0
             d = daily_map.get(sym)
+            if d and price is not None and not _is_price_scale_compatible(price, d.get("close")):
+                d = None
             if price is None and d:
                 price = d.get("close")
                 pct = d.get("change_percent") or 0

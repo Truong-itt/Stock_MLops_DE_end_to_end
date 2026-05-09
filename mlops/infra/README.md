@@ -8,8 +8,30 @@ Thư mục `mlops/infra/` là cụm MLOps chạy cho bài toán phát hiện và
 - `postgres`: metadata DB cho Airflow/infra
 - `mlflow`: tracking + registry
 - `airflow-webserver`, `airflow-scheduler`: điều phối retrain
+- `airflow` (thêm): điều phối 1 tiến trình data worker theo lịch (news)
 - `whale-ml-service`: train + serve model dự báo hậu bất thường
 - `gradio`: UI test nhanh endpoint dự báo
+
+## Airflow cho data workers
+
+Da them 1 DAG de quan ly tien trinh Python trong `data/`:
+
+- `stock_data_news_worker`: chay `news_worker.py --once` (`*/5 * * * *`)
+
+Luu y: cac worker chay lien tuc duoc tach ra ngoai Airflow va chay qua `data/docker-compose.yml`:
+
+- `stream_data.py` (producer)
+- `agg_worker.py`
+- `sentiment_worker.py`
+
+Tat ca DAG deu tu dong unpause khi tao (`is_paused_upon_creation=False`) de co the quan ly start/stop tren UI Airflow.
+
+### Log van giu nhu hien tai
+
+- Script logger van ghi vao: `data/log` (duoc mount vao `/var/log/stockraw` trong Airflow container).
+- Task log van co trong Airflow: `mlops/infra/logs`.
+
+Nhu vay ban van xem duoc log script goc nhu truoc, dong thoi co them log task tren Airflow.
 
 ## Khởi động full cụm
 
@@ -39,6 +61,13 @@ docker compose up -d --build
    - có `model_version`
    - có `selected_models.direction` và `selected_models.sessions`
 5. Web backend gọi `POST /predict-batch` để enrich cảnh báo BOCPD bằng forecast ML.
+
+## Luồng challenger theo mã
+
+- Model global vẫn là champion mặc định cho toàn hệ thống.
+- Khi có event bất thường đi qua API predict, service có thể train challenger riêng theo từng mã ở background.
+- Challenger theo mã được so sánh với champion global trên holdout của chính mã đó.
+- Chỉ khi vượt ngưỡng mới promote alias `production` cho model của mã đó; nếu không sẽ giữ global champion để serve.
 
 ## DAG retrain
 
@@ -84,6 +113,7 @@ Từ thư mục `mlops/infra`:
 ```bash
 curl -s http://localhost:8090/health | jq '.data | {model_name, model_version, selected_models, mlflow_run_id}'
 curl -s http://localhost:8090/model/info | jq '.data | {ready, selected_models, metrics, model_version, model_source}'
+curl -s http://localhost:8090/model/symbols | jq '.data'
 ```
 
 ## Tài liệu chi tiết

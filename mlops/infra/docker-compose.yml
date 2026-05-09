@@ -16,10 +16,16 @@ x-airflow-common: &airflow-common
     AWS_ACCESS_KEY_ID: minio
     AWS_SECRET_ACCESS_KEY: minio123
     AWS_DEFAULT_REGION: us-east-1
+    STOCK_SYSTEM_ROOT: /opt/project/Stock_system
+    SYMBOL_REGISTRY_PATH: /app/config/symbol_registry.json
+    TRANSFORMERS_CACHE: /app/.cache/huggingface
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ../../../:/opt/project
+    - ../../config:/app/config:ro
+    - ../../data/log:/var/log/stockraw
+    - ../../data/.cache/huggingface:/app/.cache/huggingface
   depends_on:
     postgres:
       condition: service_healthy
@@ -188,6 +194,8 @@ services:
       context: ./whale_ml
     restart: unless-stopped
     environment:
+      # db, store, mlflow
+      
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 8123
       CLICKHOUSE_USER: default
@@ -202,16 +210,32 @@ services:
       AWS_DEFAULT_REGION: us-east-1
       WHALE_ML_MODEL_NAME: whale_move_forecaster
       WHALE_ML_MODEL_ALIAS: production
-      PREFER_MLFLOW_REGISTRY: "1"
-      MLFLOW_REGISTRY_REQUIRED: "1"
+      # WHALE_ML_LOG_DIR: /var/log/whale_ml
+      # WHALE_ML_LOG_FILE: whale_ml.log
+      # WHALE_ML_LOG_KEEP_DAYS: "30"
+      # WHALE_ML_LOG_TIMEZONE: Asia/Ho_Chi_Minh
+      # PREFER_MLFLOW_REGISTRY: "1"
+      # MLFLOW_REGISTRY_REQUIRED: "1"
+
       AUTO_TRAIN_ON_STARTUP: "1"
-      AUTO_RETRAIN_INTERVAL_MIN: "0"
+      # AUTO_RETRAIN_INTERVAL_MIN: "0"
+
       TRAIN_LOOKBACK_DAYS: "240"
       TRAIN_MAX_ROWS: "120000"
       MAX_FORECAST_HORIZON: "5"
+      SYMBOL_TRAIN_COOLDOWN_MIN: "180"
+      # SYMBOL_TRAIN_LOOKBACK_DAYS: "240"
+      SYMBOL_TRAIN_MAX_ROWS: "20000"
+      SYMBOL_MIN_TRAIN_SAMPLES: "350"
+      SYMBOL_PROMOTION_REQUIRE_BOTH: "1"
+      SYMBOL_PROMOTION_MIN_DIRECTION_DELTA: "0.0"
+      SYMBOL_PROMOTION_MIN_SESSIONS_DELTA: "0.0"
+      # SYMBOL_MLFLOW_REGISTRY_REQUIRED: "1"
+      WHALE_ML_SYMBOL_CANDIDATE_ALIAS: "candidate"
     volumes:
       - ./whale_ml/artifacts:/app/artifacts
-      - ../../config:/app/config:ro
+      - ./whale_ml/config:/app/config:ro
+      - ./whale_ml/logs:/var/log/whale_ml
     ports:
       - "8090:8090"
     networks:

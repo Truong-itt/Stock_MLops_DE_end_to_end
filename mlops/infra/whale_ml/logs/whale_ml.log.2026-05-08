@@ -1,0 +1,11 @@
+2026-05-08 13:01:23 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (score=0.999401 via roc_auc), sessions model=random_forest_regressor (score=-0.000000 via neg_mae)
+2026-05-08 19:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 19:02:13 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 19:04:20 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-09 01:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-09 01:02:14 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-09 01:04:20 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-09 07:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-09 07:02:13 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-09 07:04:20 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-09 13:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.

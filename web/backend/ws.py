@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List, Set
@@ -86,6 +86,25 @@ def _build_daily_map(rows: List[dict]) -> Dict[str, dict]:
     return daily_map
 
 
+def _positive_float_or_none(value):
+    try:
+        if value is None:
+            return None
+        f = float(value)
+        return f if f > 0 else None
+    except Exception:
+        return None
+
+
+def _is_price_scale_compatible(base_price, candidate_price, low_ratio: float = 0.2, high_ratio: float = 5.0) -> bool:
+    base = _positive_float_or_none(base_price)
+    cand = _positive_float_or_none(candidate_price)
+    if base is None or cand is None:
+        return True
+    ratio = cand / base
+    return low_ratio <= ratio <= high_ratio
+
+
 def _placeholder_row(symbol: str) -> dict:
     """Create a stable placeholder for symbols not yet populated in Scylla."""
     return {
@@ -146,6 +165,8 @@ def _fetch_merged_data() -> tuple[List[dict], str]:
         if r.get("price") is not None:
             # Merge daily OHLC data (open, high, low, vwap, volume) into latest row
             daily = daily_map.get(sym)
+            if daily and not _is_price_scale_compatible(r.get("price"), daily.get("close")):
+                daily = None
             if daily:
                 r["open"] = daily.get("open")
                 r["high"] = daily.get("high")
@@ -200,6 +221,76 @@ async def poll_latest_prices():
         await asyncio.sleep(1.5)
 
 
+def _to_int_or_none(value):
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_tick_epoch_ms(value):
+    if value is None:
+        return -1
+
+    raw = str(value).strip()
+    if not raw:
+        return -1
+
+    if raw.isdigit():
+        iv = int(raw)
+        if iv < 10_000_000_000:
+            iv *= 1000
+        return iv
+
+    try:
+        normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return -1
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return int(dt.timestamp() * 1000)
+
+
+def _matched_sort_key(row: dict) -> int:
+    producer_ts = _to_int_or_none(row.get("producer_timestamp"))
+    if producer_ts is not None and producer_ts > 0:
+        if producer_ts < 10_000_000_000:
+            producer_ts *= 1000
+        return producer_ts
+    return _to_tick_epoch_ms(row.get("timestamp"))
+
+
+def _with_matched_size(rows: List[dict]) -> List[dict]:
+    out: List[dict] = []
+    for idx, row in enumerate(rows):
+        item = dict(row)
+
+        last_size = _to_int_or_none(item.get("last_size"))
+        if last_size is not None and last_size > 0:
+            item["matched_size"] = last_size
+            out.append(item)
+            continue
+
+        matched_size = 0
+        cur_day_volume = _to_int_or_none(item.get("day_volume"))
+        next_day_volume = None
+        if idx + 1 < len(rows):
+            next_day_volume = _to_int_or_none(rows[idx + 1].get("day_volume"))
+
+        if cur_day_volume is not None and next_day_volume is not None:
+            delta = cur_day_volume - next_day_volume
+            if delta > 0:
+                matched_size = delta
+
+        item["matched_size"] = matched_size
+        out.append(item)
+    return out
+
+
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
@@ -228,16 +319,21 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     elif rtype == "get_ohlcv":
                         symbol = req.get("symbol", "").upper()
-                        interval = req.get("interval", "1m")
+                        interval = req.get("interval", "1d")
                         req_date = req.get("date")
                         rows = []
                         
                         # Map interval → query strategy
                         DAILY_INTERVALS = {
-                            "15d": 15,
+                            "1d": 1,
+                            "1w": 7,
                             "1mo": 30,
-                            "6mo": 180,
+                            "3mo": 90,
                             "1y": 365,
+                            "5y": 1825,
+                            # Backward-compatible aliases for older clients.
+                            "15d": 15,
+                            "6mo": 180,
                         }
                         if interval in DAILY_INTERVALS:
                             # Query daily data
@@ -313,11 +409,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif rtype == "get_matched_orders":
                         symbol = req.get("symbol", "").upper()
                         limit = min(int(req.get("limit", 50)), 200)
+                        fetch_limit = min(max(limit * 4, 200), 2000)
                         rows = list(db.execute(
-                            "SELECT timestamp, price, last_size, change, change_percent "
+                            "SELECT timestamp, producer_timestamp, price, last_size, day_volume, change, change_percent "
                             "FROM stock_prices WHERE symbol=%s LIMIT %s",
-                            [symbol, limit],
+                            [symbol, fetch_limit],
                         ))
+                        rows.sort(key=_matched_sort_key, reverse=True)
+                        rows = _with_matched_size(rows)
+                        rows = rows[:limit]
                         count_rows = list(db.execute(
                             "SELECT COUNT(*) as cnt FROM stock_prices WHERE symbol=%s",
                             [symbol],

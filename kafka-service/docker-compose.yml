@@ -143,7 +143,7 @@ services:
         kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_vn  | head -n 20
         kafka-topics --bootstrap-server kafka-1:29092 --describe --topic stock_price_dif | head -n 20
 
-        echo '✅ Done (partitions>=50, RF=3)'
+        echo 'Done (partitions>=50, RF=3)'
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.6.0

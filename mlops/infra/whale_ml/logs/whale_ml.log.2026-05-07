@@ -1,0 +1,16 @@
+2026-05-07 07:06:33 @whale_ml.modeling [INFO]: Connected ClickHouse for whale ML at clickhouse:8123
+2026-05-07 07:06:41 @whale_ml.modeling [INFO]: Loaded 10 promoted symbol models from local storage
+2026-05-07 07:06:41 @whale_ml.service [INFO]: Loaded existing model bundle (source=registry)
+2026-05-07 07:10:39 @whale_ml.modeling [INFO]: Connected ClickHouse for whale ML at clickhouse:8123
+2026-05-07 07:10:42 @whale_ml.modeling [INFO]: Loaded 10 promoted symbol models from local storage
+2026-05-07 07:10:42 @whale_ml.service [INFO]: Loaded existing model bundle (source=registry)
+2026-05-07 13:01:13 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (score=0.999878 via roc_auc), sessions model=random_forest_regressor (score=-0.000000 via neg_mae)
+2026-05-07 19:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-07 19:02:14 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-07 19:04:20 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 01:00:08 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 01:02:14 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 01:04:20 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 07:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 07:02:14 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-08 07:05:58 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (score=0.999650 via roc_auc), sessions model=random_forest_regressor (score=-0.000000 via neg_mae)

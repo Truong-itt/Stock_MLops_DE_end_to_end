@@ -118,11 +118,24 @@ Mỗi lần `POST /train`:
    - ưu tiên `MLflow Registry` (`models:/...@production`)
    - fallback `joblib` local `/app/artifacts/whale_move_model.joblib`
 
+### 3.1 Champion-Challenger theo mã (symbol)
+
+- Champion: model global (`whale_move_forecaster@production`).
+- Challenger: model train riêng theo mã khi có event bất thường đi vào `predict-event/predict-batch`.
+- Challenger được train nền (background), có cooldown theo mã để tránh train dồn dập.
+- Trước khi promote, challenger bắt buộc so sánh với champion global trên holdout của chính mã đó:
+  - `direction_delta = challenger_direction_score - global_direction_score`
+  - `sessions_delta = challenger_sessions_score - global_sessions_score`
+- Chỉ promote lên alias `production` của model theo mã khi qua ngưỡng cấu hình.
+- Dù không promote, challenger vẫn được log MLflow (alias `candidate`) để theo dõi.
+
 ## 4) API
 
 - `GET /health`
 - `GET /model/info`
+- `GET /model/symbols`
 - `POST /train`
+- `POST /train-symbol`
 - `POST /predict-event`
 - `POST /predict-batch`
 
@@ -165,6 +178,18 @@ Mỗi lần `POST /train`:
 }
 ```
 
+### `POST /train-symbol` request
+
+```json
+{
+  "symbol": "AAPL",
+  "lookback_days": 240,
+  "max_rows": 20000,
+  "horizon": 5,
+  "force_promote": false
+}
+```
+
 ## 5) Chạy service
 
 Từ thư mục `mlops/infra`:
@@ -203,6 +228,14 @@ curl -s http://localhost:8090/model/info \
   - `MAX_FORECAST_HORIZON` (default `5`)
   - `AUTO_TRAIN_ON_STARTUP`
   - `AUTO_RETRAIN_INTERVAL_MIN` (production nên để `0`, Airflow điều phối retrain)
+- Symbol challenger policy:
+  - `SYMBOL_CHALLENGER_ENABLED` (bật/tắt train riêng theo mã)
+  - `SYMBOL_TRAIN_ON_ANOMALY` (trigger train khi có event bất thường đi vào API predict)
+  - `SYMBOL_TRAIN_COOLDOWN_MIN` (cooldown train lại theo mã)
+  - `SYMBOL_TRAIN_LOOKBACK_DAYS`, `SYMBOL_TRAIN_MAX_ROWS`, `SYMBOL_MIN_TRAIN_SAMPLES`
+  - `SYMBOL_PROMOTION_REQUIRE_BOTH` (`1`: challenger phải thắng cả direction và sessions)
+  - `SYMBOL_PROMOTION_MIN_DIRECTION_DELTA`, `SYMBOL_PROMOTION_MIN_SESSIONS_DELTA`
+  - `WHALE_ML_SYMBOL_CANDIDATE_ALIAS` (default `candidate`)
 - Fallback artifact:
   - `MODEL_ARTIFACT_PATH` (default `/app/artifacts/whale_move_model.joblib`)
 
@@ -224,3 +257,32 @@ DAG verify bắt buộc sau train:
 - `selected_models.direction` có giá trị
 - `selected_models.sessions` có giá trị
 - model ở trạng thái ready cho serving
+
+
+
+model global
+
+TRAIN_LOOKBACK_DAYS có thể nhìn lại giá trị 240 ngày 
+
+TRAIN_MAX_ROWS số dòng nhận ban đầu có thể đat được tối đa 120000 dòng
+
+MAX_FORECAST_HORIZON có thệ dự đoán tối đa số phiên mặc định 5 
+
+GLOBAL_MIN_TRAIN_SAMPLES  sau khi lọc dữ liệu thì cần tôi thiểu mặc định 800
+
+SYMBOL_TRAIN_LOOKBACK_DAYS số ngày  có thể  được tối đa cho train riêng từng mã 240 ngày
+
+SYMBOL_TRAIN_MAX_ROWS số lượng tối đa dòng khi thu thập ban đầu 20000
+
+SYMBOL_MIN_TRAIN_SAMPLES số lượng mẫu min sau khi thực hiện lọc 350
+
+
+SYMBOL_TRAIN_COOLDOWN_MIN từ khi nhận tính hiệu bát thươngf cho đến mặc định 180 phút tiếp theo dù có nhận tính hiệu bất thường cũng không train lại model
+
+
+các ngưỡng để pass lên production
+SYMBOL_PROMOTION_REQUIRE_BOTH: "1"
+SYMBOL_PROMOTION_MIN_DIRECTION_DELTA: "0.0"
+SYMBOL_PROMOTION_MIN_SESSIONS_DELTA: "0.0"
+
+

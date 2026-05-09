@@ -5,6 +5,7 @@
 const API   = window.location.origin;
 const WS_PROTO = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const WS_URL= `${WS_PROTO}://${window.location.host}/ws`;
+const MAX_LINE_POINTS = 5000;
 
 // ─── State ──────────────────────────────────────────────────
 let stocks      = {};          // keyed by symbol
@@ -34,10 +35,39 @@ let activePriceChartMode = "line";
 let drawerLineSeries = [];
 let drawerLineSymbol = null;
 let drawerOhlcvMeta = null;
+let drawerCandleCycleMeta = null;
 let selectedCandles = [];
 let selectedCandlesSymbol = null;
 let activeCandleHitState = null;
+let candleMinuteDetailLoading = false;
+let candleCycleAuto = true;
 let candleViewport = { key: null, start: 0, end: 0 };
+let lineViewport = { key: null, start: 0, end: 0, stickToRight: true };
+let lineAutoExpandInFlight = false;
+let lineAutoExpandLastKey = "";
+let lineAutoExpandLastAt = 0;
+let candleDragSelection = {
+  active: false,
+  canvasId: null,
+  symbol: null,
+  anchorKey: null,
+  anchorIndex: -1,
+  endIndex: -1,
+  moved: false,
+  suppressClickUntil: 0,
+};
+let candlePanDrag = {
+  active: false,
+  canvasId: null,
+  lastClientX: 0,
+  moved: false,
+  suppressClickUntil: 0,
+};
+let linePanDrag = {
+  active: false,
+  canvasId: null,
+  lastClientX: 0,
+};
 
 // ─── Stock lists for market filter ─────────────────────────
 let VN_STOCKS = new Set();
@@ -180,6 +210,7 @@ const el = {
   newsGrid  : $("newsGrid"),
   chartDock : $("chartDock"),
   dockInterval: $("dockInterval"),
+  dockCandleInterval: $("dockCandleInterval"),
   dockChartMode: $("dockChartMode"),
   dockChartTitle: $("dockChartTitle"),
   dockChart: $("dockChart"),
@@ -192,6 +223,7 @@ const el = {
   drChange  : $("drChange"),
   drInfo    : $("drInfo"),
   drInterval: $("drInterval"),
+  drCandleInterval: $("drCandleInterval"),
   drChartMode: $("drChartMode"),
   drChartTitle: $("drChartTitle"),
   drChart   : $("drChart"),
@@ -201,11 +233,28 @@ const el = {
   drNews    : $("drNews"),
   drawerClose: $("drawerClose"),
   toasts    : $("toasts"),
+  moMeta    : $("moMeta"),
   moBody    : $("moBody"),
+  moBuyVal  : $("moBuyVal"),
   moTotalVal: $("moTotalVal"),
+  moSellVal : $("moSellVal"),
+  moBuyPct  : $("moBuyPct"),
+  moSellPct : $("moSellPct"),
+  moBuyBar  : $("moBuyBar"),
+  moSellBar : $("moSellBar"),
+  mobDepthBody: $("mobDepthBody"),
+  mobRoundBtn: $("mobRoundBtn"),
+  mobOddBtn: $("mobOddBtn"),
+  mobBuyForceLbl: $("mobBuyForceLbl"),
+  mobSellForceLbl: $("mobSellForceLbl"),
+  mobBuyForceBar: $("mobBuyForceBar"),
+  mobSellForceBar: $("mobSellForceBar"),
   symbolFormStatus: $("symbolFormStatus"),
 };
 let moTimer = null;  // matched orders auto-refresh timer
+let moLotMode = "round";
+let moLastRows = [];
+let moLastTotalCount = 0;
 let breadthChart = null;  // market breadth chart instance
 let volumeTop10Chart = null; // top 10 volume chart instance
 let currentTopTab = 'gainers'; // current top tab
@@ -222,6 +271,42 @@ const fmt  = (n,d=2) => n==null||isNaN(n)?"--":Number(n).toLocaleString("en-US",
 const fmtV = v => {if(v==null)return"--";if(v>=1e9)return(v/1e9).toFixed(2)+"B";if(v>=1e6)return(v/1e6).toFixed(2)+"M";if(v>=1e3)return(v/1e3).toFixed(1)+"K";return v.toString()};
 const fmtProb = n => n==null||isNaN(n)?"--":`${(Number(n)*100).toFixed(2)}%`;
 const cls = v => v>0?"up":v<0?"down":"flat";
+
+function isDarkTheme(){
+  return document.documentElement?.getAttribute("data-theme") === "dark";
+}
+
+function cssVar(name, fallback){
+  try{
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }catch(_err){
+    return fallback;
+  }
+}
+
+function getChartPalette(){
+  const dark = isDarkTheme();
+  return {
+    line: cssVar("--chart-line", dark ? "#4ea2ff" : "#1f7bff"),
+    fillTop: cssVar("--chart-fill-top", dark ? "rgba(78,162,255,.30)" : "rgba(31,123,255,.24)"),
+    fillBottom: cssVar("--chart-fill-bottom", dark ? "rgba(78,162,255,.04)" : "rgba(31,123,255,.03)"),
+    grid: cssVar("--chart-grid", dark ? "rgba(167,189,225,.22)" : "rgba(86,111,153,.19)"),
+    text: cssVar("--chart-text", dark ? "#d3def3" : "#5a6b86"),
+    tooltipBg: cssVar("--chart-tooltip-bg", dark ? "#243a5a" : "#ffffff"),
+    tooltipTitle: cssVar("--chart-tooltip-title", dark ? "#f4f8ff" : "#18253b"),
+    tooltipBody: cssVar("--chart-tooltip-body", dark ? "#d3def3" : "#475a78"),
+    tooltipBorder: cssVar("--chart-tooltip-border", dark ? "#5c78a8" : "#d5dfed"),
+    up: cssVar("--green", "#10b981"),
+    down: cssVar("--red", "#ef4444"),
+    wick: cssVar("--chart-wick", dark ? "rgba(198,214,240,.92)" : "rgba(126,146,180,.9)"),
+    volumeUp: cssVar("--chart-volume-up", dark ? "rgba(16,185,129,.36)" : "rgba(16,185,129,.34)"),
+    volumeDown: cssVar("--chart-volume-down", dark ? "rgba(239,68,68,.34)" : "rgba(239,68,68,.32)"),
+    selectionFill: cssVar("--chart-selection-fill", dark ? "rgba(96,165,250,.14)" : "rgba(56,139,253,.10)"),
+    selectionStroke: cssVar("--chart-selection-stroke", dark ? "rgba(167,208,255,.86)" : "rgba(43,117,234,.58)"),
+    selectionDot: cssVar("--chart-selection-dot", dark ? "rgba(96,165,250,.95)" : "rgba(31,123,255,.86)"),
+  };
+}
 
 function _normSym(value){
   return String(value || "").trim().toUpperCase();
@@ -298,13 +383,23 @@ function parseChartTime(value){
   if(value instanceof Date) return isNaN(value) ? null : value;
 
   if(typeof value === "number"){
-    const d = new Date(value);
+    const iv = value > 0 && value < 10_000_000_000 ? value * 1000 : value;
+    const d = new Date(iv);
     return isNaN(d) ? null : d;
   }
 
   if(typeof value === "string"){
     const raw = value.trim();
     if(!raw) return null;
+
+    if(/^\d+$/.test(raw)){
+      let iv = Number(raw);
+      if(!Number.isFinite(iv)) return null;
+      if(iv < 10_000_000_000) iv *= 1000;
+      const d = new Date(iv);
+      return isNaN(d) ? null : d;
+    }
+
     let normalized = raw;
 
     // Backend often serializes Scylla timestamps without timezone suffix.
@@ -331,14 +426,51 @@ function normalizePriceSeries(rows){
     .map(row => {
       const time = getRowTime(row);
       const close = row?.close ?? row?.price;
-      if(!time || close == null || !Number.isFinite(Number(close))) return null;
+      const closeNum = Number(close);
+      if(!time || !Number.isFinite(closeNum) || closeNum <= 0) return null;
       return {
         x: time,
-        y: Number(close),
+        y: closeNum,
       };
     })
     .filter(Boolean)
     .sort((a, b) => a.x - b.x);
+}
+
+function sanitizeRealtimeSeries(symbol, series){
+  const cleaned = (series || [])
+    .map(point => {
+      const x = parseChartTime(point?.x);
+      const y = Number(point?.y);
+      if(!x || !Number.isFinite(y) || y <= 0) return null;
+      return { x, y };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.x - b.x);
+
+  if(cleaned.length < 2) return cleaned;
+
+  const ys = cleaned.map(item => item.y);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  if(!Number.isFinite(minY) || !Number.isFinite(maxY) || minY <= 0) return cleaned;
+
+  const anchor = Number(stocks[symbol]?.price);
+  const ref = Number.isFinite(anchor) && anchor > 0 ? anchor : cleaned[cleaned.length - 1].y;
+  if(!Number.isFinite(ref) || ref <= 0) return cleaned;
+
+  // If scale explodes (e.g. mixed markets with same ticker), keep points near realtime scale.
+  if((maxY / minY) <= 20) return cleaned;
+
+  const nearRef = cleaned.filter(item => item.y >= ref * 0.2 && item.y <= ref * 5);
+  if(nearRef.length >= 2) return nearRef;
+
+  if(nearRef.length === 1){
+    const p = nearRef[0];
+    return [{ x: new Date(p.x.getTime() - 60000), y: p.y }, p];
+  }
+
+  return cleaned;
 }
 
 function normalizeCandlestickSeries(rows){
@@ -353,7 +485,14 @@ function normalizeCandlestickSeries(rows){
       const volumeRaw = row?.volume ?? row?.day_volume;
       const volume = Number(volumeRaw);
       const exchange = row?.exchange != null ? String(row.exchange) : null;
-      if(!time || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)){
+      if(
+        !time ||
+        !Number.isFinite(open) ||
+        !Number.isFinite(high) ||
+        !Number.isFinite(low) ||
+        !Number.isFinite(close) ||
+        open <= 0 || high <= 0 || low <= 0 || close <= 0
+      ){
         return null;
       }
       return {
@@ -369,6 +508,210 @@ function normalizeCandlestickSeries(rows){
     })
     .filter(Boolean)
     .sort((a, b) => a.x - b.x);
+}
+
+const INTERVAL_LABELS = {
+  "15m": "15 phút",
+  "1h": "1 giờ",
+  "4h": "4 giờ",
+  "1d": "1 ngày",
+  "1w": "1 tuần",
+  "1mo": "1 tháng",
+  "3mo": "3 tháng",
+  "1y": "1 năm",
+  "5y": "5 năm",
+};
+
+const CANDLE_CYCLE_MINUTES = {
+  "15m": 15,
+  "1h": 60,
+  "4h": 240,
+  "1d": 1440,
+  "1w": 10080,
+  "1mo": 43200,
+};
+
+const RANGE_DEFAULT_CANDLE_CYCLE = {
+  "1d": "15m",
+  "1w": "1h",
+  "1mo": "4h",
+  "3mo": "1d",
+  "1y": "1w",
+  "5y": "1mo",
+};
+
+function intervalLabel(iv){
+  return INTERVAL_LABELS[String(iv || "").toLowerCase()] || String(iv || "--");
+}
+
+function getBucketStartByCycle(dateLike, cycle){
+  const d = new Date(dateLike);
+  if(isNaN(d)) return null;
+
+  switch(String(cycle || "").toLowerCase()){
+    case "15m": {
+      d.setUTCSeconds(0, 0);
+      d.setUTCMinutes(Math.floor(d.getUTCMinutes() / 15) * 15);
+      return d;
+    }
+    case "1h": {
+      d.setUTCMinutes(0, 0, 0);
+      return d;
+    }
+    case "4h": {
+      d.setUTCMinutes(0, 0, 0);
+      d.setUTCHours(Math.floor(d.getUTCHours() / 4) * 4);
+      return d;
+    }
+    case "1d": {
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    }
+    case "1w": {
+      const weekday = (d.getUTCDay() + 6) % 7; // Monday = 0
+      d.setUTCDate(d.getUTCDate() - weekday);
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    }
+    case "1mo": {
+      d.setUTCDate(1);
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    }
+    default:
+      return d;
+  }
+}
+
+function inferSourceCandleMinutes(candles){
+  if(!Array.isArray(candles) || candles.length < 2) return null;
+
+  const deltas = [];
+  for(let i = 1; i < candles.length; i += 1){
+    const prev = candles[i - 1]?.x?.getTime?.();
+    const curr = candles[i]?.x?.getTime?.();
+    if(!Number.isFinite(prev) || !Number.isFinite(curr)) continue;
+    const diffMinutes = (curr - prev) / 60000;
+    if(Number.isFinite(diffMinutes) && diffMinutes > 0){
+      deltas.push(diffMinutes);
+    }
+  }
+
+  if(!deltas.length) return null;
+  deltas.sort((a, b) => a - b);
+  return deltas[Math.floor(deltas.length / 2)];
+}
+
+function getSuggestedCandleCycle(rangeInterval){
+  const key = String(rangeInterval || "").toLowerCase();
+  return RANGE_DEFAULT_CANDLE_CYCLE[key] || "1h";
+}
+
+function syncRecommendedCandleCycle(rangeInterval, options = {}){
+  const suggested = getSuggestedCandleCycle(rangeInterval);
+  if(!suggested) return;
+
+  const force = !!options.force;
+  if(!force && !candleCycleAuto) return;
+
+  if(el.drCandleInterval) el.drCandleInterval.value = suggested;
+  if(el.dockCandleInterval) el.dockCandleInterval.value = suggested;
+}
+
+function isVnSymbolForCandles(symbol){
+  const sym = _normSym(symbol);
+  if(!sym) return false;
+  if(VN_STOCKS.has(sym)) return true;
+  const exch = String(stocks?.[sym]?.exchange || "").toUpperCase();
+  return exch === "VSE";
+}
+
+function applyCandlestickCycle(candles, requestedCycle, options = {}){
+  const requested = String(requestedCycle || "1d").toLowerCase();
+  if(!Array.isArray(candles) || !candles.length){
+    return {
+      candles: [],
+      requested,
+      resolved: requested,
+      limitedBySource: false,
+      sourceMinutes: null,
+    };
+  }
+
+  const targetMinutes = CANDLE_CYCLE_MINUTES[requested] || CANDLE_CYCLE_MINUTES["1d"];
+  const sourceMinutes = inferSourceCandleMinutes(candles);
+  const keepDetailWhenCollapsed = !!options.keepDetailWhenCollapsed;
+
+  // If requested cycle is finer than source data, keep source candles.
+  if(sourceMinutes && targetMinutes < (sourceMinutes * 0.9)){
+    return {
+      candles,
+      requested,
+      resolved: requested,
+      limitedBySource: true,
+      sourceMinutes,
+    };
+  }
+
+  if(sourceMinutes && Math.abs(targetMinutes - sourceMinutes) < Math.max(1, sourceMinutes * 0.12)){
+    return {
+      candles,
+      requested,
+      resolved: requested,
+      limitedBySource: false,
+      sourceMinutes,
+    };
+  }
+
+  const grouped = new Map();
+  candles.forEach(candle => {
+    const bucket = getBucketStartByCycle(candle.x, requested);
+    if(!bucket) return;
+    const key = String(bucket.getTime());
+    const volume = Number(candle.v);
+
+    if(!grouped.has(key)){
+      grouped.set(key, {
+        x: bucket,
+        o: candle.o,
+        h: candle.h,
+        l: candle.l,
+        c: candle.c,
+        v: Number.isFinite(volume) ? volume : null,
+        ex: candle.ex,
+        key,
+      });
+      return;
+    }
+
+    const agg = grouped.get(key);
+    agg.h = Math.max(agg.h, candle.h);
+    agg.l = Math.min(agg.l, candle.l);
+    agg.c = candle.c;
+    if(!agg.ex && candle.ex) agg.ex = candle.ex;
+    if(Number.isFinite(volume)){
+      agg.v = Number.isFinite(agg.v) ? (agg.v + volume) : volume;
+    }
+  });
+
+  const groupedCandles = [...grouped.values()].sort((a, b) => a.x - b.x);
+  if(keepDetailWhenCollapsed && groupedCandles.length <= 1 && candles.length >= 8){
+    return {
+      candles,
+      requested,
+      resolved: requested,
+      limitedBySource: true,
+      sourceMinutes,
+    };
+  }
+
+  return {
+    candles: groupedCandles,
+    requested,
+    resolved: requested,
+    limitedBySource: false,
+    sourceMinutes,
+  };
 }
 
 function candleKey(candle){
@@ -401,10 +744,270 @@ function toggleSelectedCandle(candle){
     selectedCandles.splice(idx, 1);
   }else{
     selectedCandles.push(key);
-    if(selectedCandles.length > 6){
-      selectedCandles = selectedCandles.slice(-6);
-    }
   }
+}
+
+function setSelectedCandleRange(candles, startIdx, endIdx){
+  if(!Array.isArray(candles) || !candles.length || !selected) return;
+  if(selectedCandlesSymbol !== selected){
+    resetSelectedCandles(selected);
+  }
+
+  const start = Math.max(0, Math.min(candles.length - 1, Math.floor(startIdx)));
+  const end = Math.max(0, Math.min(candles.length - 1, Math.floor(endIdx)));
+  const from = Math.min(start, end);
+  const to = Math.max(start, end);
+
+  selectedCandles = candles
+    .slice(from, to + 1)
+    .map(item => candleKey(item))
+    .filter(Boolean);
+}
+
+function formatSelectionDuration(ms){
+  if(!Number.isFinite(ms) || ms <= 0) return "0 phut";
+  if(ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))} giay`;
+  if(ms < 3_600_000) return `${(ms / 60_000).toFixed(ms < 600_000 ? 1 : 0)} phut`;
+  if(ms < 86_400_000) return `${(ms / 3_600_000).toFixed(ms < 21_600_000 ? 1 : 0)} gio`;
+  return `${(ms / 86_400_000).toFixed(ms < 604_800_000 ? 1 : 0)} ngay`;
+}
+
+function buildSelectedCandleSummary(picked){
+  const ordered = [...(picked || [])].sort((a, b) => a.x - b.x);
+  if(!ordered.length) return null;
+
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+  const open = Number(first.o);
+  const close = Number(last.c);
+
+  let high = -Infinity;
+  let low = Infinity;
+  let totalVolume = 0;
+  let closeSum = 0;
+  let weightedCloseSum = 0;
+  let weightedVol = 0;
+
+  ordered.forEach(item => {
+    const h = Number(item.h);
+    const l = Number(item.l);
+    const c = Number(item.c);
+    const v = Number.isFinite(item.v) ? Number(item.v) : 0;
+
+    if(Number.isFinite(h) && h > high) high = h;
+    if(Number.isFinite(l) && l < low) low = l;
+    if(Number.isFinite(c)) closeSum += c;
+
+    totalVolume += v;
+    if(v > 0 && Number.isFinite(c)){
+      weightedCloseSum += c * v;
+      weightedVol += v;
+    }
+  });
+
+  const change = Number.isFinite(open) && Number.isFinite(close) ? close - open : null;
+  const changePct = Number.isFinite(change) && Number.isFinite(open) && open !== 0
+    ? (change / open) * 100
+    : null;
+
+  return {
+    ordered,
+    first,
+    last,
+    open: Number.isFinite(open) ? open : null,
+    close: Number.isFinite(close) ? close : null,
+    high: Number.isFinite(high) ? high : null,
+    low: Number.isFinite(low) ? low : null,
+    totalVolume,
+    avgVolume: totalVolume / Math.max(1, ordered.length),
+    avgClose: closeSum / Math.max(1, ordered.length),
+    weightedClose: weightedVol > 0 ? (weightedCloseSum / weightedVol) : null,
+    change,
+    changePct,
+    durationMs: Math.max(0, last.x - first.x),
+  };
+}
+
+function buildSelectionPreviewRows(ordered){
+  if(!ordered.length) return { rows: [], truncated: false };
+  if(ordered.length <= 24){
+    return { rows: ordered, truncated: false };
+  }
+
+  const sample = [...ordered.slice(0, 2), ...ordered.slice(-2)];
+  const seen = new Set();
+  const rows = sample.filter(item => {
+    const key = candleKey(item);
+    if(!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { rows, truncated: true };
+}
+
+function abortCandleDragSelection(){
+  candleDragSelection.active = false;
+  candleDragSelection.canvasId = null;
+  candleDragSelection.symbol = null;
+  candleDragSelection.anchorKey = null;
+  candleDragSelection.anchorIndex = -1;
+  candleDragSelection.endIndex = -1;
+  candleDragSelection.moved = false;
+}
+
+function beginCandlePanDrag(canvas, clientX){
+  if(!canvas || !Number.isFinite(clientX)) return;
+  candlePanDrag.active = true;
+  candlePanDrag.canvasId = canvas.id;
+  candlePanDrag.lastClientX = clientX;
+  candlePanDrag.moved = false;
+}
+
+function abortCandlePanDrag(){
+  candlePanDrag.active = false;
+  candlePanDrag.canvasId = null;
+  candlePanDrag.moved = false;
+}
+
+function finishCandlePanDrag(){
+  if(!candlePanDrag.active) return;
+  const moved = candlePanDrag.moved;
+  abortCandlePanDrag();
+  if(moved){
+    candlePanDrag.suppressClickUntil = Date.now() + 260;
+  }
+  const activeCanvas = getActiveChartCanvas();
+  if(activeCanvas) activeCanvas.style.cursor = "crosshair";
+}
+
+function updateCandlePanDrag(clientX){
+  if(!candlePanDrag.active || !selected || !isCandlestickMode()) return false;
+
+  const canvas = candlePanDrag.canvasId === "dockChart" ? el.dockChart : el.drChart;
+  if(!canvas || canvas !== getActiveChartCanvas()) return false;
+
+  const hitState = getCandlestickStateForCanvas(canvas);
+  if(!hitState || !Number.isFinite(hitState.step) || hitState.step <= 0) return false;
+
+  const dx = clientX - candlePanDrag.lastClientX;
+  if(Math.abs(dx) < hitState.step) return false;
+
+  const rawSteps = Math.trunc(dx / hitState.step);
+  if(rawSteps === 0) return false;
+
+  const direction = rawSteps < 0 ? -1 : 1;
+  let changed = false;
+  for(let i = 0; i < Math.abs(rawSteps); i += 1){
+    if(!panCandlestickViewport(direction)) break;
+    changed = true;
+  }
+
+  candlePanDrag.lastClientX += rawSteps * hitState.step;
+
+  if(changed){
+    candlePanDrag.moved = true;
+    redrawActiveCandlestickChart();
+    canvas.style.cursor = "grabbing";
+  }
+  return changed;
+}
+
+function getCandlestickStateForCanvas(canvas){
+  const state = activeCandleHitState;
+  if(!state || !canvas) return null;
+  if(state.canvasId !== canvas.id) return null;
+  if(state.symbol !== selected) return null;
+  if(!state.candles?.length) return null;
+  return state;
+}
+
+function getCandleIndexFromClientX(hitState, canvas, clientX, clampToPlot = false){
+  if(!hitState || !canvas || !Number.isFinite(hitState.step) || hitState.step <= 0) return -1;
+  const rect = canvas.getBoundingClientRect();
+  const minX = hitState.padLeft;
+  const maxX = hitState.padLeft + hitState.plotWidth;
+
+  let localX = clientX - rect.left;
+  if(clampToPlot){
+    localX = Math.max(minX, Math.min(maxX - 0.001, localX));
+  }else if(localX < minX || localX > maxX){
+    return -1;
+  }
+
+  const idx = Math.floor((localX - hitState.padLeft) / hitState.step);
+  return Math.max(0, Math.min(hitState.candles.length - 1, idx));
+}
+
+function resolveDragAnchorIndex(hitState){
+  if(!hitState?.candles?.length) return -1;
+
+  if(candleDragSelection.anchorKey){
+    const found = hitState.candles.findIndex(item => candleKey(item) === candleDragSelection.anchorKey);
+    if(found >= 0) return found;
+  }
+
+  const idx = Number.isFinite(candleDragSelection.anchorIndex)
+    ? Math.floor(candleDragSelection.anchorIndex)
+    : 0;
+  return Math.max(0, Math.min(hitState.candles.length - 1, idx));
+}
+
+function beginCandleDragSelection(canvas, hitState, anchorIdx){
+  if(!canvas || !hitState || anchorIdx < 0) return;
+
+  candleDragSelection.active = true;
+  candleDragSelection.canvasId = canvas.id;
+  candleDragSelection.symbol = selected;
+  candleDragSelection.anchorIndex = anchorIdx;
+  candleDragSelection.endIndex = anchorIdx;
+  candleDragSelection.anchorKey = candleKey(hitState.candles[anchorIdx]);
+  candleDragSelection.moved = false;
+}
+
+function updateCandleDragSelection(clientX){
+  if(!candleDragSelection.active || !selected || !isCandlestickMode()) return false;
+
+  const canvas = candleDragSelection.canvasId === "dockChart" ? el.dockChart : el.drChart;
+  if(!canvas || canvas !== getActiveChartCanvas()) return false;
+
+  const hitState = getCandlestickStateForCanvas(canvas);
+  if(!hitState) return false;
+
+  const anchorIdx = resolveDragAnchorIndex(hitState);
+  if(anchorIdx < 0) return false;
+
+  const nextIdx = getCandleIndexFromClientX(hitState, canvas, clientX, true);
+  if(nextIdx < 0) return false;
+  if(nextIdx === candleDragSelection.endIndex && candleDragSelection.moved) return false;
+
+  candleDragSelection.endIndex = nextIdx;
+  candleDragSelection.moved = candleDragSelection.moved || nextIdx !== anchorIdx;
+  if(!candleDragSelection.moved) return false;
+
+  setSelectedCandleRange(hitState.candles, anchorIdx, nextIdx);
+  renderCandleSelectionInfo();
+  redrawActiveCandlestickChart();
+  canvas.style.cursor = "ew-resize";
+  return true;
+}
+
+function finishCandleDragSelection(clientX = null){
+  if(!candleDragSelection.active) return;
+
+  if(Number.isFinite(clientX)){
+    updateCandleDragSelection(clientX);
+  }
+
+  const moved = candleDragSelection.moved;
+  abortCandleDragSelection();
+  if(moved){
+    candleDragSelection.suppressClickUntil = Date.now() + 280;
+    renderCandleSelectionInfo();
+    redrawActiveCandlestickChart();
+  }
+
+  const activeCanvas = getActiveChartCanvas();
+  if(activeCanvas) activeCanvas.style.cursor = "crosshair";
 }
 
 function setCandleInfoPanelsVisible(visible){
@@ -444,7 +1047,7 @@ function renderCandleSelectionInfo(){
       <div class="candle-info-head">
         <div>
           <strong>Chi tiet nen</strong>
-          <span>Bam vao cot nen de xem khoi luong, chon nhieu nen, giu Ctrl + lan chuot de thu/phong, giu Shift + lan chuot de di trai/phai.</span>
+           <span>Bam de chon tung nen, keo chuot trai de chon vung nhieu nen, giu Alt + keo de luot du lieu, giu Shift + lan de qua trai/phai, giu Ctrl + lan de thu/phong.</span>
         </div>
       </div>
       <div class="candle-info-empty">San hien tai: <strong>${currentExchange}</strong></div>
@@ -453,9 +1056,23 @@ function renderCandleSelectionInfo(){
     return;
   }
 
-  const totalVolume = picked.reduce((sum, item) => sum + (Number.isFinite(item.v) ? item.v : 0), 0);
-  const avgClose = picked.reduce((sum, item) => sum + (Number(item.c) || 0), 0) / Math.max(1, picked.length);
-  const infoRows = picked.map(item => {
+  const summary = buildSelectedCandleSummary(picked);
+  if(!summary){
+    panels.forEach(panel => { panel.innerHTML = '<div class="candle-info-empty">Khong tong hop duoc du lieu nen da chon.</div>'; });
+    return;
+  }
+
+  const moveClass = summary.change > 0 ? "positive" : (summary.change < 0 ? "negative" : "neutral");
+  const changeText = Number.isFinite(summary.change)
+    ? `${summary.change >= 0 ? "+" : ""}${fmt(summary.change, 2)}`
+    : "--";
+  const changePctText = Number.isFinite(summary.changePct)
+    ? `${summary.changePct >= 0 ? "+" : ""}${fmt(summary.changePct, 2)}%`
+    : "--";
+  const weightedCloseText = Number.isFinite(summary.weightedClose) ? fmt(summary.weightedClose, 2) : "--";
+  const preview = buildSelectionPreviewRows(summary.ordered);
+
+  const infoRows = preview.rows.map(item => {
     const exchange = item.ex || currentExchange;
     return `
       <div class="candle-info-item">
@@ -466,20 +1083,61 @@ function renderCandleSelectionInfo(){
     `;
   }).join("");
 
+  const truncateNote = preview.truncated
+    ? `<div class="candle-info-note">Da chon ${summary.ordered.length} nen. Dang hien 4 moc dai dien, thu phong chart de xem chi tiet hon.</div>`
+    : "";
+
   const html = `
     <div class="candle-info-head">
       <div>
-        <strong>Da chon ${picked.length} nen</strong>
-        <span>Tong KL: ${fmtV(totalVolume)} | Gia dong cua TB: ${fmt(avgClose, 2)}</span>
+        <strong>Tong hop ${summary.ordered.length} nen</strong>
+        <span>${fmtDT(summary.first.x)} → ${fmtDT(summary.last.x)} (${formatSelectionDuration(summary.durationMs)})</span>
       </div>
       <button type="button" class="candle-info-clear" data-action="clear-candle-select">Xoa chon</button>
     </div>
+    <div class="candle-summary-grid">
+      <div class="candle-summary-item">
+        <span>Open dau ky</span>
+        <strong>${fmt(summary.open, 2)}</strong>
+      </div>
+      <div class="candle-summary-item">
+        <span>Close cuoi ky</span>
+        <strong>${fmt(summary.close, 2)}</strong>
+      </div>
+      <div class="candle-summary-item">
+        <span>High / Low</span>
+        <strong>${fmt(summary.high, 2)} / ${fmt(summary.low, 2)}</strong>
+      </div>
+      <div class="candle-summary-item ${moveClass}">
+        <span>Bien dong</span>
+        <strong>${changeText} (${changePctText})</strong>
+      </div>
+      <div class="candle-summary-item">
+        <span>Tong KL</span>
+        <strong>${fmtV(summary.totalVolume)}</strong>
+      </div>
+      <div class="candle-summary-item">
+        <span>KL TB / nen</span>
+        <strong>${fmtV(summary.avgVolume)}</strong>
+      </div>
+      <div class="candle-summary-item">
+        <span>Close TB</span>
+        <strong>${fmt(summary.avgClose, 2)}</strong>
+      </div>
+      <div class="candle-summary-item">
+        <span>Close weighted theo KL</span>
+        <strong>${weightedCloseText}</strong>
+      </div>
+    </div>
+    ${truncateNote}
     <div class="candle-info-list">${infoRows}</div>
   `;
   panels.forEach(panel => { panel.innerHTML = html; });
 }
 
 function clearCandleHitState(){
+  abortCandleDragSelection();
+  abortCandlePanDrag();
   activeCandleHitState = null;
   if(el.dockChart) el.dockChart.style.cursor = "default";
   if(el.drChart) el.drChart.style.cursor = "default";
@@ -493,6 +1151,295 @@ function resetCandleViewport(){
   candleViewport = { key: null, start: 0, end: 0 };
 }
 
+function lineViewportKey(symbol){
+  return `${_normSym(symbol)}|${getActiveChartInterval()}`;
+}
+
+function resetLineViewport(){
+  lineViewport = { key: null, start: 0, end: 0, stickToRight: true };
+}
+
+function getDefaultLineViewportSize(interval, total){
+  const iv = String(interval || "1d").toLowerCase();
+  const map = {
+    "1d": 16,
+    "1w": 32,
+    "1mo": 48,
+    "3mo": 72,
+    "1y": 96,
+    "5y": 140,
+  };
+  const fallback = Math.min(total, 80);
+  return Math.min(total, map[iv] || fallback);
+}
+
+function getNextLineHistoryInterval(interval){
+  const iv = String(interval || "1d").toLowerCase();
+  const expandMap = {
+    "1d": "1w",
+    "1w": "1mo",
+    "1mo": "3mo",
+    "3mo": "1y",
+    "1y": "5y",
+  };
+  return expandMap[iv] || null;
+}
+
+function tryAutoExpandLineHistory(trigger = ""){
+  if(!selected || isCandlestickMode()) return false;
+  if(lineAutoExpandInFlight) return false;
+
+  const currentIv = String(getActiveChartInterval() || "1d").toLowerCase();
+  const nextIv = getNextLineHistoryInterval(currentIv);
+  if(!nextIv) return false;
+
+  const now = Date.now();
+  const key = `${selected}|${currentIv}->${nextIv}`;
+  if(lineAutoExpandLastKey === key && (now - lineAutoExpandLastAt) < 1400){
+    return false;
+  }
+  lineAutoExpandLastKey = key;
+  lineAutoExpandLastAt = now;
+  lineAutoExpandInFlight = true;
+
+  syncChartIntervals({ value: nextIv });
+  candleCycleAuto = true;
+  syncRecommendedCandleCycle(nextIv, { force: true });
+  selectedRunlengthSegmentId = "__all";
+  candleMinuteDetailLoading = false;
+  resetCandleViewport();
+  resetLineViewport();
+  if(selected) resetSelectedCandles(selected);
+  renderCandleSelectionInfo();
+  updatePriceChartTitle();
+
+  const triggerText = trigger ? ` (${trigger})` : "";
+  toast(`Mo rong du lieu line sang ${intervalLabel(nextIv)}${triggerText}`, "ok");
+
+  loadOHLCV(selected, nextIv, {
+    onComplete: () => {
+      lineAutoExpandInFlight = false;
+    },
+  });
+  return true;
+}
+
+function getLineSeriesForViewport(symbol, series){
+  if(!symbol || !Array.isArray(series) || !series.length){
+    resetLineViewport();
+    return [];
+  }
+
+  const key = lineViewportKey(symbol);
+  const max = series.length;
+  if(lineViewport.key !== key){
+    const windowSize = getDefaultLineViewportSize(getActiveChartInterval(), max);
+    const start = Math.max(0, max - windowSize);
+    lineViewport = { key, start, end: max, stickToRight: true };
+  }
+
+  let start = Number.isFinite(lineViewport.start) ? Math.floor(lineViewport.start) : 0;
+  let end = Number.isFinite(lineViewport.end) ? Math.floor(lineViewport.end) : max;
+  let count = end - start;
+  let stickToRight = lineViewport.stickToRight !== false;
+
+  if(count < 2){
+    const windowSize = Math.max(2, getDefaultLineViewportSize(getActiveChartInterval(), max));
+    start = Math.max(0, max - windowSize);
+    end = max;
+    count = end - start;
+    stickToRight = true;
+  }
+
+  if(stickToRight){
+    end = max;
+    start = Math.max(0, end - count);
+  }
+
+  if(start < 0) start = 0;
+  if(end > max) end = max;
+  if(start >= end){
+    const windowSize = Math.max(2, getDefaultLineViewportSize(getActiveChartInterval(), max));
+    start = Math.max(0, max - windowSize);
+    end = max;
+  }
+
+  const atRightEdge = end >= max;
+  lineViewport = { key, start, end, stickToRight: atRightEdge ? true : stickToRight };
+  return series.slice(start, end);
+}
+
+function zoomLineViewport(zoomIn, focusRatio = 0.5){
+  if(!selected || !drawerLineSeries?.length || drawerLineSymbol !== selected) return false;
+
+  const fullSeries = drawerLineSeries;
+  const key = lineViewportKey(selected);
+  if(lineViewport.key !== key){
+    lineViewport = { key, start: 0, end: fullSeries.length, stickToRight: true };
+  }
+
+  let start = Number.isFinite(lineViewport.start) ? Math.floor(lineViewport.start) : 0;
+  let end = Number.isFinite(lineViewport.end) ? Math.floor(lineViewport.end) : fullSeries.length;
+  let count = end - start;
+  if(count <= 0){
+    start = 0;
+    end = fullSeries.length;
+    count = end - start;
+  }
+
+  const minCount = Math.min(12, fullSeries.length);
+  const maxCount = fullSeries.length;
+
+  let nextCount = count;
+  if(zoomIn){
+    nextCount = Math.max(minCount, Math.floor(count * 0.86));
+  }else{
+    nextCount = Math.min(maxCount, Math.ceil(count * 1.16));
+  }
+  if(nextCount === count) return false;
+
+  const clampedFocus = Math.max(0.05, Math.min(0.95, focusRatio));
+  const anchorIndex = start + Math.round(clampedFocus * Math.max(count - 1, 0));
+  let nextStart = Math.round(anchorIndex - clampedFocus * Math.max(nextCount - 1, 0));
+  let nextEnd = nextStart + nextCount;
+
+  if(nextStart < 0){
+    nextStart = 0;
+    nextEnd = nextCount;
+  }
+  if(nextEnd > maxCount){
+    nextEnd = maxCount;
+    nextStart = Math.max(0, nextEnd - nextCount);
+  }
+
+  lineViewport = {
+    key,
+    start: nextStart,
+    end: nextEnd,
+    stickToRight: nextEnd >= maxCount,
+  };
+  return true;
+}
+
+function panLineViewport(direction){
+  if(!selected || !Array.isArray(drawerLineSeries) || !drawerLineSeries.length || drawerLineSymbol !== selected){
+    return false;
+  }
+
+  const fullSeries = drawerLineSeries;
+  const key = lineViewportKey(selected);
+  if(lineViewport.key !== key){
+    getLineSeriesForViewport(selected, fullSeries);
+  }
+
+  let start = Number.isFinite(lineViewport.start) ? Math.floor(lineViewport.start) : 0;
+  let end = Number.isFinite(lineViewport.end) ? Math.floor(lineViewport.end) : fullSeries.length;
+  let count = end - start;
+
+  if(count <= 0){
+    start = 0;
+    end = fullSeries.length;
+    count = end - start;
+  }
+  if(count >= fullSeries.length) return false;
+
+  const dir = direction > 0 ? 1 : -1;
+  const step = Math.max(1, Math.floor(count * 0.12));
+  let nextStart = start + dir * step;
+  nextStart = Math.max(0, Math.min(fullSeries.length - count, nextStart));
+  const nextEnd = nextStart + count;
+
+  if(nextStart === start && nextEnd === end) return false;
+
+  lineViewport = {
+    key,
+    start: nextStart,
+    end: nextEnd,
+    stickToRight: nextEnd >= fullSeries.length,
+  };
+  return true;
+}
+
+function beginLinePanDrag(canvas, clientX){
+  if(!canvas || !Number.isFinite(clientX)) return false;
+  if(isCandlestickMode() || !selected || drawerLineSymbol !== selected) return false;
+
+  const visible = getLineSeriesForViewport(selected, drawerLineSeries);
+  if(!visible.length || visible.length >= drawerLineSeries.length) return false;
+
+  linePanDrag.active = true;
+  linePanDrag.canvasId = canvas.id;
+  linePanDrag.lastClientX = clientX;
+  canvas.style.cursor = "grabbing";
+  return true;
+}
+
+function abortLinePanDrag(){
+  linePanDrag.active = false;
+  linePanDrag.canvasId = null;
+}
+
+function finishLinePanDrag(){
+  if(!linePanDrag.active) return;
+  const canvas = linePanDrag.canvasId === "dockChart" ? el.dockChart : el.drChart;
+  abortLinePanDrag();
+  if(canvas && !isCandlestickMode()){
+    const total = Array.isArray(drawerLineSeries) ? drawerLineSeries.length : 0;
+    const visible = total > 0 ? getLineSeriesForViewport(selected, drawerLineSeries) : [];
+    canvas.style.cursor = total > visible.length ? "grab" : "default";
+  }
+}
+
+function updateLinePanDrag(clientX){
+  if(!linePanDrag.active || isCandlestickMode() || !selected || drawerLineSymbol !== selected) return false;
+
+  const canvas = linePanDrag.canvasId === "dockChart" ? el.dockChart : el.drChart;
+  if(!canvas || canvas !== getActiveChartCanvas()) return false;
+
+  if(!Array.isArray(drawerLineSeries) || drawerLineSeries.length < 3) return false;
+  const visible = getLineSeriesForViewport(selected, drawerLineSeries);
+  const visibleCount = Math.max(2, visible.length);
+  const width = Math.max(1, canvas.clientWidth || canvas.getBoundingClientRect().width || 1);
+  const stepPx = Math.max(6, width / Math.max(visibleCount - 1, 1));
+
+  const dx = clientX - linePanDrag.lastClientX;
+  if(Math.abs(dx) < stepPx) return false;
+
+  const rawSteps = Math.trunc(dx / stepPx);
+  if(rawSteps === 0) return false;
+
+  const direction = rawSteps < 0 ? -1 : 1;
+  let changed = false;
+  for(let i = 0; i < Math.abs(rawSteps); i += 1){
+    if(!panLineViewport(direction)) break;
+    changed = true;
+  }
+
+  linePanDrag.lastClientX += rawSteps * stepPx;
+
+  if(changed){
+    refreshRealtimeLineViewport();
+    canvas.style.cursor = "grabbing";
+  }else if(direction < 0){
+    tryAutoExpandLineHistory("drag-left");
+  }
+  return changed;
+}
+
+function getDefaultCandleViewportSize(interval, total){
+  const iv = String(interval || "1d").toLowerCase();
+  const map = {
+    "1d": 20,
+    "1w": 48,
+    "1mo": 72,
+    "3mo": 96,
+    "1y": 120,
+    "5y": 180,
+  };
+  const fallback = Math.min(total, 120);
+  return Math.min(total, map[iv] || fallback);
+}
+
 function getCandlesForViewport(symbol, candles){
   if(!symbol || !Array.isArray(candles) || !candles.length){
     resetCandleViewport();
@@ -501,7 +1448,10 @@ function getCandlesForViewport(symbol, candles){
 
   const key = candleViewportKey(symbol);
   if(candleViewport.key !== key){
-    candleViewport = { key, start: 0, end: candles.length };
+    const max = candles.length;
+    const windowSize = getDefaultCandleViewportSize(getActiveChartInterval(), max);
+    const start = Math.max(0, max - windowSize);
+    candleViewport = { key, start, end: max };
   }
 
   const max = candles.length;
@@ -786,76 +1736,357 @@ function upsertRealtimeLinePoint(symbol, price, rawTime){
     drawerLineSeries.push({ x: pointTime, y: numericPrice });
   }
 
-  if(drawerLineSeries.length > 360){
-    drawerLineSeries = drawerLineSeries.slice(-360);
+  if(drawerLineSeries.length > MAX_LINE_POINTS){
+    drawerLineSeries = drawerLineSeries.slice(-MAX_LINE_POINTS);
   }
+
+  drawerLineSeries = sanitizeRealtimeSeries(symbol, drawerLineSeries);
+}
+
+function buildRealtimeLineGradient(canvas, palette){
+  const ctx = canvas?.getContext?.("2d");
+  if(!ctx) return palette.fillTop;
+  const h = Math.max(220, canvas.clientHeight || canvas.height || 320);
+  const gradient = ctx.createLinearGradient(0, 0, 0, h);
+  gradient.addColorStop(0, palette.fillTop);
+  gradient.addColorStop(1, palette.fillBottom);
+  return gradient;
+}
+
+function resolveRealtimeXAxisMeta(series, canvas){
+  const firstMs = series?.[0]?.x?.getTime?.();
+  const lastMs = series?.[series.length - 1]?.x?.getTime?.();
+  const spanMs = (Number.isFinite(firstMs) && Number.isFinite(lastMs))
+    ? Math.max(0, lastMs - firstMs)
+    : 0;
+
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const monthApprox = 30 * day;
+
+  let unit = "minute";
+  if(spanMs > (45 * day)){
+    unit = "month";
+  }else if(spanMs > (2 * day)){
+    unit = "day";
+  }else if(spanMs > (3 * hour)){
+    unit = "hour";
+  }
+
+  const width = Math.max(320, canvas?.clientWidth || canvas?.width || 820);
+  const roughLabelWidth = unit === "month" ? 96 : unit === "day" ? 82 : 108;
+  const maxTicksLimit = Math.max(4, Math.min(14, Math.floor(width / roughLabelWidth)));
+
+  return {
+    unit,
+    maxTicksLimit,
+    tooltipFormat: spanMs >= monthApprox ? "dd/MM/yyyy" : "dd/MM/yyyy HH:mm",
+    displayFormats: {
+      minute: "HH:mm",
+      hour: "dd/MM HH:mm",
+      day: "dd/MM",
+      week: "dd/MM",
+      month: "MM/yyyy",
+      quarter: "MM/yyyy",
+      year: "yyyy",
+    },
+  };
+}
+
+function buildRealtimePriceGuidePlugin(palette){
+  return {
+    id: "realtimePriceGuide",
+    afterDatasetsDraw(chartInstance){
+      const datasets = chartInstance?.data?.datasets || [];
+      const lineDs = datasets.find(ds => ds?.yAxisID === "y" && ds?.type !== "bar");
+      const points = lineDs?.data || [];
+      if(!points.length) return;
+
+      const latest = points[points.length - 1];
+      const latestPrice = Number(latest?.y);
+      if(!Number.isFinite(latestPrice)) return;
+
+      const yScale = chartInstance?.scales?.y;
+      const area = chartInstance?.chartArea;
+      const ctx = chartInstance?.ctx;
+      if(!yScale || !area || !ctx) return;
+
+      const y = yScale.getPixelForValue(latestPrice);
+      if(!Number.isFinite(y) || y < area.top || y > area.bottom) return;
+
+      ctx.save();
+
+      // Draw horizontal dashed price guide similar to the reference style.
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = palette.line;
+      ctx.moveTo(area.left, y);
+      ctx.lineTo(area.right, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const text = fmt(latestPrice, 2);
+      ctx.font = "600 11px JetBrains Mono, monospace";
+      ctx.textBaseline = "middle";
+
+      const padX = 7;
+      const boxH = 18;
+      const boxW = Math.ceil(ctx.measureText(text).width + (padX * 2));
+      const boxX = Math.max(area.left + 2, area.right - boxW - 2);
+      const boxY = Math.max(area.top + 2, Math.min(y - (boxH / 2), area.bottom - boxH - 2));
+      const radius = 4;
+
+      ctx.fillStyle = palette.line;
+      ctx.beginPath();
+      ctx.moveTo(boxX + radius, boxY);
+      ctx.lineTo(boxX + boxW - radius, boxY);
+      ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + radius);
+      ctx.lineTo(boxX + boxW, boxY + boxH - radius);
+      ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - radius, boxY + boxH);
+      ctx.lineTo(boxX + radius, boxY + boxH);
+      ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - radius);
+      ctx.lineTo(boxX, boxY + radius);
+      ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(text, boxX + padX, boxY + (boxH / 2));
+      ctx.restore();
+    },
+  };
+}
+
+function buildRealtimeVolumeSeries(symbol, lineSeries){
+  if(drawerCandleSymbol !== symbol || !Array.isArray(drawerCandles) || !drawerCandles.length){
+    return [];
+  }
+  if(!Array.isArray(lineSeries) || !lineSeries.length){
+    return [];
+  }
+
+  const volumeByTs = new Map();
+  drawerCandles.forEach(candle => {
+    const ts = candle?.x?.getTime?.();
+    const vol = Number(candle?.v);
+    if(Number.isFinite(ts) && Number.isFinite(vol) && vol > 0){
+      volumeByTs.set(ts, vol);
+    }
+  });
+  if(!volumeByTs.size){
+    return [];
+  }
+
+  let prevPrice = null;
+  const rawSeries = lineSeries
+    .map(point => {
+      const ts = point?.x?.getTime?.();
+      const price = Number(point?.y);
+      if(!Number.isFinite(ts) || !Number.isFinite(price)){
+        return null;
+      }
+      const volume = Number(volumeByTs.get(ts));
+      if(!Number.isFinite(volume) || volume <= 0){
+        prevPrice = price;
+        return null;
+      }
+      const dir = prevPrice == null || price >= prevPrice ? "up" : "down";
+      prevPrice = price;
+      return { x: point.x, volume, dir };
+    })
+    .filter(Boolean);
+
+  if(!rawSeries.length){
+    return [];
+  }
+
+  // Keep bars inside the bottom strip of the realtime chart (TradingView-like).
+  const maxVolume = rawSeries.reduce((acc, item) => Math.max(acc, item.volume), 0);
+  if(!Number.isFinite(maxVolume) || maxVolume <= 0){
+    return [];
+  }
+  // Keep volume bars in a thin strip at the bottom (similar to TradingView).
+  const volumeBand = 0.08;
+  const minVisible = 0.003;
+
+  return rawSeries.map(item => {
+    const ratio = Math.max(0, Math.min(1, item.volume / maxVolume));
+    const scaled = Math.max(minVisible, ratio * volumeBand);
+    return {
+      x: item.x,
+      y: scaled,
+      raw_volume: item.volume,
+      dir: item.dir,
+    };
+  });
+}
+
+function buildRealtimeDatasets(canvas, symbol, series, palette){
+  const datasets = [];
+  const volumeSeries = buildRealtimeVolumeSeries(symbol, series);
+  if(volumeSeries.length){
+    datasets.push({
+      type: "bar",
+      label: `${symbol} volume`,
+      data: volumeSeries,
+      yAxisID: "yVol",
+      backgroundColor: ctx => ctx.raw?.dir === "down" ? palette.volumeDown : palette.volumeUp,
+      borderWidth: 0,
+      maxBarThickness: 5,
+      barPercentage: 0.76,
+      categoryPercentage: 0.9,
+      order: 0,
+    });
+  }
+
+  datasets.push({
+    type: "line",
+    label: `${symbol} realtime`,
+    data: series,
+    borderColor: palette.line,
+    backgroundColor: buildRealtimeLineGradient(canvas, palette),
+    fill: true,
+    tension: 0.22,
+    pointRadius: 0,
+    pointHoverRadius: 2.5,
+    pointHitRadius: 14,
+    borderWidth: 2.35,
+    yAxisID: "y",
+    order: 1,
+  });
+
+  return datasets;
 }
 
 function drawRealtimeLineChart(canvas, series, sym){
   if(chart){chart.destroy();chart=null}
   if(!series?.length){
+    if(canvas) canvas.style.cursor = "default";
     drawCanvasEmpty(canvas, "Chua co du lieu realtime");
     return;
   }
 
-  const closes = series.map(point => point.y);
-  const isUp = closes.length >= 2 && closes[closes.length - 1] >= closes[0];
-  const color = isUp ? "#10b981" : "#ef4444";
-  const bg = isUp ? "rgba(16,185,129,.08)" : "rgba(239,68,68,.08)";
+  const palette = getChartPalette();
+  const xMeta = resolveRealtimeXAxisMeta(series, canvas);
 
   chart = new Chart(canvas, {
     type: "line",
+    plugins: [buildRealtimePriceGuidePlugin(palette)],
     data: {
-      datasets: [
-        {
-          label: `${sym} realtime`,
-          data: series,
-          borderColor: color,
-          backgroundColor: bg,
-          fill: true,
-          tension: .35,
-          pointRadius: 0,
-          borderWidth: 2,
-        },
-      ],
+      datasets: buildRealtimeDatasets(canvas, sym, series, palette),
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      normalized: true,
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: "#161b26",
-          titleColor: "#f0f2f8",
-          bodyColor: "#7d849b",
-          borderColor: "#1f2739",
+          mode: "index",
+          intersect: false,
+          backgroundColor: palette.tooltipBg,
+          titleColor: palette.tooltipTitle,
+          bodyColor: palette.tooltipBody,
+          borderColor: palette.tooltipBorder,
           borderWidth: 1,
+          callbacks: {
+            label: ctx => {
+              const y = Number(ctx.parsed?.y);
+              if(ctx.dataset?.yAxisID === "yVol"){
+                const raw = Number(ctx.raw?.raw_volume);
+                return `KL: ${fmtV(Number.isFinite(raw) ? raw : y)}`;
+              }
+              return `Gia: ${fmt(y, 2)}`;
+            },
+          },
         },
       },
       scales: {
-        x: { type: "time", ticks: { color: "#4e556b", maxTicksLimit: 7 }, grid: { color: "rgba(31,39,57,.5)" } },
-        y: { ticks: { color: "#4e556b" }, grid: { color: "rgba(31,39,57,.5)" } },
+        x: {
+          type: "time",
+          time: {
+            tooltipFormat: xMeta.tooltipFormat,
+            unit: xMeta.unit,
+            displayFormats: xMeta.displayFormats,
+          },
+          ticks: { color: palette.text, maxTicksLimit: xMeta.maxTicksLimit },
+          grid: { color: palette.grid },
+        },
+        y: {
+          position: "right",
+          ticks: {
+            color: palette.text,
+            callback: value => fmt(Number(value), 2),
+          },
+          grid: { color: palette.grid },
+        },
+        yVol: {
+          display: false,
+          min: 0,
+          max: 1,
+          beginAtZero: true,
+          ticks: { display: false },
+          grid: { display: false },
+        },
       },
     },
   });
+
+  const total = Array.isArray(drawerLineSeries) ? drawerLineSeries.length : series.length;
+  if(canvas) canvas.style.cursor = total > series.length ? "grab" : "default";
 }
 
 function updateRealtimeLineChart(sym){
   if(!chart || chart.config?.type !== "line") return;
-  const series = drawerLineSymbol === sym ? drawerLineSeries : [];
+  const fullSeries = drawerLineSymbol === sym ? drawerLineSeries : [];
+  if(!fullSeries.length) return;
+
+  const series = getLineSeriesForViewport(sym, fullSeries);
   if(!series.length) return;
 
-  const closes = series.map(point => point.y);
-  const isUp = closes.length >= 2 && closes[closes.length - 1] >= closes[0];
-  const color = isUp ? "#10b981" : "#ef4444";
-  const bg = isUp ? "rgba(16,185,129,.08)" : "rgba(239,68,68,.08)";
-
-  chart.data.datasets[0].label = `${sym} realtime`;
-  chart.data.datasets[0].data = series;
-  chart.data.datasets[0].borderColor = color;
-  chart.data.datasets[0].backgroundColor = bg;
+  const palette = getChartPalette();
+  const activeCanvas = chart.canvas || getActiveChartCanvas();
+  const xMeta = resolveRealtimeXAxisMeta(series, activeCanvas);
+  chart.data.datasets = buildRealtimeDatasets(activeCanvas, sym, series, palette);
+  if(chart.options?.plugins?.tooltip){
+    chart.options.plugins.tooltip.backgroundColor = palette.tooltipBg;
+    chart.options.plugins.tooltip.titleColor = palette.tooltipTitle;
+    chart.options.plugins.tooltip.bodyColor = palette.tooltipBody;
+    chart.options.plugins.tooltip.borderColor = palette.tooltipBorder;
+  }
+  if(chart.options?.scales?.x?.ticks) chart.options.scales.x.ticks.color = palette.text;
+  if(chart.options?.scales?.x?.ticks) chart.options.scales.x.ticks.maxTicksLimit = xMeta.maxTicksLimit;
+  if(chart.options?.scales?.x?.time){
+    chart.options.scales.x.time.tooltipFormat = xMeta.tooltipFormat;
+    chart.options.scales.x.time.unit = xMeta.unit;
+    chart.options.scales.x.time.displayFormats = xMeta.displayFormats;
+  }
+  if(chart.options?.scales?.x?.grid) chart.options.scales.x.grid.color = palette.grid;
+  if(chart.options?.scales?.y?.ticks) chart.options.scales.y.ticks.color = palette.text;
+  if(chart.options?.scales?.y?.grid) chart.options.scales.y.grid.color = palette.grid;
   chart.update("none");
+
+  const canvas = getActiveChartCanvas();
+  if(canvas && !isCandlestickMode()){
+    canvas.style.cursor = fullSeries.length > series.length ? "grab" : "default";
+  }
+}
+
+function refreshRealtimeLineViewport(){
+  if(isCandlestickMode() || !selected) return;
+
+  const canvas = getActiveChartCanvas();
+  if(!canvas) return;
+
+  updatePriceChartTitle();
+  if(chart && chart.config?.type === "line"){
+    updateRealtimeLineChart(selected);
+  }else{
+    redrawActivePriceChart();
+  }
 }
 
 function redrawActivePriceChart(){
@@ -894,10 +2125,11 @@ function redrawActivePriceChart(){
   if(drawerLineSymbol !== selected){
     drawerLineSymbol = selected;
     drawerLineSeries = [];
+    resetLineViewport();
   }
 
   if(!drawerLineSeries.length && drawerCandles?.length && drawerCandleSymbol === selected){
-    drawerLineSeries = buildRealtimeSeriesFromCandles(drawerCandles).slice(-360);
+    drawerLineSeries = buildRealtimeSeriesFromCandles(drawerCandles).slice(-MAX_LINE_POINTS);
   }
 
   if(!drawerLineSeries.length){
@@ -907,7 +2139,8 @@ function redrawActivePriceChart(){
     }
   }
 
-  drawRealtimeLineChart(canvas, drawerLineSeries, selected);
+  const visibleLineSeries = getLineSeriesForViewport(selected, drawerLineSeries);
+  drawRealtimeLineChart(canvas, visibleLineSeries, selected);
 }
 
 function redrawActiveCandlestickChart(){
@@ -951,11 +2184,15 @@ function drawCandlestickChart(canvas, candles, overlay = null){
   const ySpan = Math.max(yMax - yMin, 1e-12);
   const yToPx = value => padTop + ((yMax - value) / ySpan) * plotHeight;
 
-  const gridColor = "rgba(31,39,57,0.28)";
-  const textColor = "#4e556b";
-  const upColor = "#10b981";
-  const downColor = "#ef4444";
-  const wickColor = "rgba(148,163,184,0.92)";
+  const palette = getChartPalette();
+  const darkTheme = isDarkTheme();
+  const gridColor = palette.grid;
+  const textColor = palette.text;
+  const upColor = palette.up;
+  const downColor = palette.down;
+  const wickColor = palette.wick;
+  const cpLineRGB = darkTheme ? "255,132,150" : "224,76,90";
+  const whaleRGB = darkTheme ? "244,114,182" : "218,76,152";
   const timeMin = candles[0].x.getTime();
   const timeMax = candles[candles.length - 1].x.getTime();
   const timeSpan = Math.max(timeMax - timeMin, 1);
@@ -984,7 +2221,7 @@ function drawCandlestickChart(canvas, candles, overlay = null){
       ctx.fillStyle = fill;
       ctx.fillRect(x1, padTop, width, plotHeight);
       if(activeSegmentId !== "__all" && activeSegmentId === seg.id){
-        ctx.strokeStyle = "rgba(255,255,255,.38)";
+        ctx.strokeStyle = palette.selectionStroke;
         ctx.lineWidth = 1;
         ctx.strokeRect(x1 + 0.5, padTop + 0.5, Math.max(1, width - 1), Math.max(1, plotHeight - 1));
       }
@@ -1013,6 +2250,25 @@ function drawCandlestickChart(canvas, candles, overlay = null){
   const step = plotWidth / candles.length;
   const bodyWidth = Math.max(3, Math.min(14, step * 0.68));
   const selectedSet = new Set(selectedCandles);
+  const selectedIndexes = [];
+  candles.forEach((item, idx) => {
+    if(selectedSet.has(candleKey(item))) selectedIndexes.push(idx);
+  });
+  const hasRangeSelection = selectedIndexes.length > 1;
+  const firstSelectedIdx = hasRangeSelection ? selectedIndexes[0] : -1;
+  const lastSelectedIdx = hasRangeSelection ? selectedIndexes[selectedIndexes.length - 1] : -1;
+  const denseRangeSelection = selectedIndexes.length > 16;
+
+  if(hasRangeSelection){
+    const x1 = padLeft + firstSelectedIdx * step;
+    const x2 = padLeft + (lastSelectedIdx + 1) * step;
+    const w = Math.max(1, x2 - x1);
+    ctx.fillStyle = palette.selectionFill;
+    ctx.fillRect(x1, padTop, w, plotHeight);
+    ctx.strokeStyle = palette.selectionStroke;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x1 + 0.5, padTop + 0.5, Math.max(1, w - 1), Math.max(1, plotHeight - 1));
+  }
 
   candles.forEach((candle, idx) => {
     const x = padLeft + (idx + 0.5) * step;
@@ -1043,10 +2299,15 @@ function drawCandlestickChart(canvas, candles, overlay = null){
     }
 
     if(selectedSet.has(candleKey(candle))){
-      ctx.strokeStyle = "rgba(255,255,255,.92)";
+      const isRangeEdge = !hasRangeSelection || idx === firstSelectedIdx || idx === lastSelectedIdx;
+      if(denseRangeSelection && !isRangeEdge){
+        return;
+      }
+
+      ctx.strokeStyle = palette.selectionStroke;
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x - bodyWidth / 2 - 1, top - 1, bodyWidth + 2, bodyHeight + 2);
-      ctx.fillStyle = "rgba(96,165,250,.95)";
+      ctx.fillStyle = palette.selectionDot;
       ctx.beginPath();
       ctx.arc(x, padTop + plotHeight + 11, 3, 0, Math.PI * 2);
       ctx.fill();
@@ -1060,7 +2321,8 @@ function drawCandlestickChart(canvas, candles, overlay = null){
       const whaleStrength = Math.max(0, Math.min(1, Number(point.whaleScore || 0)));
 
       if(cpStrength >= 0.14){
-        ctx.strokeStyle = `rgba(239,68,68,${0.08 + cpStrength * 0.5})`;
+        const cpAlpha = 0.08 + cpStrength * (darkTheme ? 0.5 : 0.42);
+        ctx.strokeStyle = `rgba(${cpLineRGB},${cpAlpha})`;
         ctx.lineWidth = cpStrength >= 0.28 ? 1.4 : 1;
         ctx.beginPath();
         ctx.moveTo(x, padTop);
@@ -1074,7 +2336,7 @@ function drawCandlestickChart(canvas, candles, overlay = null){
           : candles[Math.max(0, Math.min(candles.length - 1, Math.round(((point.x.getTime() - timeMin) / timeSpan) * (candles.length - 1))))]?.c;
         const y = yToPx(Number.isFinite(priceGuess) ? priceGuess : candles[candles.length - 1].c);
         const radius = 2 + Math.min(4, whaleStrength * 6);
-        ctx.fillStyle = `rgba(244,114,182,${0.35 + whaleStrength * 0.45})`;
+        ctx.fillStyle = `rgba(${whaleRGB},${0.35 + whaleStrength * 0.45})`;
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fill();
@@ -1085,16 +2347,16 @@ function drawCandlestickChart(canvas, candles, overlay = null){
     ctx.textBaseline = "top";
     ctx.font = "11px Inter, sans-serif";
     const legendY = padTop + 6;
-    ctx.fillStyle = "rgba(239,68,68,.85)";
+    ctx.fillStyle = `rgba(${cpLineRGB},.85)`;
     ctx.fillRect(padLeft + 6, legendY, 10, 2);
-    ctx.fillStyle = "#7d849b";
+    ctx.fillStyle = textColor;
     ctx.fillText("CP line", padLeft + 20, legendY - 4);
 
-    ctx.fillStyle = "rgba(244,114,182,.9)";
+    ctx.fillStyle = `rgba(${whaleRGB},.9)`;
     ctx.beginPath();
     ctx.arc(padLeft + 96, legendY + 1, 3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#7d849b";
+    ctx.fillStyle = textColor;
     ctx.fillText("Whale", padLeft + 104, legendY - 4);
   }
 
@@ -1156,11 +2418,13 @@ function setSymbolFormStatus(message="", type=""){
 
 function drawCanvasEmpty(canvas, message){
   if(!canvas) return;
+  const palette = getChartPalette();
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = "#4e556b";
-  ctx.font = "13px Inter";
+  ctx.fillStyle = palette.text;
+  ctx.font = "600 13px Inter";
   ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
   ctx.fillText(message, canvas.width / 2, canvas.height / 2);
 }
 
@@ -1174,8 +2438,14 @@ function ingestChangepoint(rows){
   });
   if(Object.keys(stocks).length) renderTable();
   if(_ovData) renderOverviewSignalChart();
-  const wlStocks = [...watchlist].filter(sym=>stocks[sym]);
-  if(wlStocks.length) renderWatchlistSignalChart(wlStocks);
+  const isWatchlistTab = document.querySelector(".tab.active")?.dataset.tab === "watchlist";
+  if(isWatchlistTab){
+    const wlStocks = [...watchlist].filter(sym=>stocks[sym]);
+    if(wlStocks.length){
+      scheduleWatchlistCardRefresh(wlStocks);
+      renderWatchlistSignalChart(wlStocks);
+    }
+  }
 }
 
 function ingestChangepointAlerts(payload){
@@ -1284,7 +2554,7 @@ async function resyncData(showToast=true){
   }finally{
     if(el.syncBtn){
       el.syncBtn.disabled = false;
-      el.syncBtn.textContent = "Dong bo lai";
+      el.syncBtn.textContent = "Reconnect";
     }
   }
 }
@@ -1401,8 +2671,8 @@ function ingest(rows, full){
     ingestSelectedRealtimePoint(selected);
   }
   if(document.querySelector(".tab.active")?.dataset.tab === "watchlist"){
-    const hasWatchlistChanges = [...watchlist].some(sym => changed.has(sym));
-    if(hasWatchlistChanges) loadWatchlist();
+    const touchedWatchlist = [...watchlist].filter(sym => changed.has(sym));
+    if(touchedWatchlist.length) scheduleWatchlistCardRefresh(touchedWatchlist);
   }
 }
 
@@ -1531,17 +2801,23 @@ function openDrawer(sym){
   el.overlay.classList.add("open");
   resetSelectedCandles(sym);
   clearCandleHitState();
+  candleMinuteDetailLoading = false;
+  abortLinePanDrag();
   resetCandleViewport();
+  resetLineViewport();
   drawerCandles = [];
   drawerCandleSymbol = sym;
   drawerLineSeries = [];
   drawerLineSymbol = sym;
   drawerOhlcvMeta = null;
+  drawerCandleCycleMeta = null;
   drawerCpHistory = [];
   drawerCpHistorySymbol = null;
   drawerRunlengthSegments = [];
   selectedRunlengthSegmentId = "__all";
   setPriceChartMode("line", { rerender: false, force: true });
+  candleCycleAuto = true;
+  syncRecommendedCandleCycle(getActiveChartInterval(), { force: true });
   renderRunlengthStrip([], sym);
   updateDrawerPrice();
   updateChartDockMode();
@@ -1564,12 +2840,16 @@ function closeDrawer(){
   selected=null;
   resetSelectedCandles(null);
   clearCandleHitState();
+  candleMinuteDetailLoading = false;
+  abortLinePanDrag();
   resetCandleViewport();
+  resetLineViewport();
   drawerCandles = [];
   drawerCandleSymbol = null;
   drawerLineSeries = [];
   drawerLineSymbol = null;
   drawerOhlcvMeta = null;
+  drawerCandleCycleMeta = null;
   drawerCpHistory = [];
   drawerCpHistorySymbol = null;
   drawerRunlengthSegments = [];
@@ -1671,24 +2951,41 @@ function syncChartModeButtons(){
       btn.classList.toggle("active", mode === activePriceChartMode);
     });
   });
+  syncCandleCycleControls();
+}
+
+function syncCandleCycleControls(){
+  const visible = isCandlestickMode();
+  [el.drCandleInterval, el.dockCandleInterval].forEach(control => {
+    if(!control) return;
+    control.classList.toggle("hidden", !visible);
+    control.disabled = !visible;
+  });
 }
 
 function updatePriceChartTitle(){
   if(!isCandlestickMode()){
-    setPriceChartTitle("Biểu đồ realtime");
+    setPriceChartTitle("Biểu đồ realtime | Keo chuot trai de luot du lieu cu/moi, Ctrl + lan de thu/phong, Shift + lan de qua trai/phai");
     return;
   }
-  const zoomHint = " | Ctrl + lăn để thu/phóng, Shift + lăn để qua trái/phải";
+  const rangeLabel = intervalLabel(getActiveChartInterval());
+  const cycleLabel = intervalLabel(getActiveCandleInterval());
+  const zoomHint = " | Bam de chon tung nen, keo chuot trai de chon vung nhieu nen, giu Alt + keo de luot, Ctrl + lan de thu/phong";
   const meta = drawerOhlcvMeta || {};
+  const cycleMeta = drawerCandleCycleMeta || {};
+  const limitedNote = cycleMeta.limitedBySource
+    ? ` • du lieu nguon ~${Math.round(cycleMeta.sourceMinutes || 0)}p`
+    : "";
+
   if(meta.fallback_used && meta.resolved_interval){
-    setPriceChartTitle(`Biểu đồ nến (${meta.resolved_interval} fallback từ ${meta.requested_interval})${zoomHint}`);
+    setPriceChartTitle(`Biểu đồ nến (Range ${rangeLabel} • Chu kỳ ${cycleLabel}${limitedNote} | fallback ${meta.resolved_interval} từ ${meta.requested_interval})${zoomHint}`);
     return;
   }
   if(meta.resolved_interval){
-    setPriceChartTitle(`Biểu đồ nến (${meta.resolved_interval})${zoomHint}`);
+    setPriceChartTitle(`Biểu đồ nến (Range ${rangeLabel} • Chu kỳ ${cycleLabel}${limitedNote})${zoomHint}`);
     return;
   }
-  setPriceChartTitle(`Biểu đồ nến${zoomHint}`);
+  setPriceChartTitle(`Biểu đồ nến (Range ${rangeLabel} • Chu kỳ ${cycleLabel}${limitedNote})${zoomHint}`);
 }
 
 function setPriceChartMode(mode, options = {}){
@@ -1701,8 +2998,13 @@ function setPriceChartMode(mode, options = {}){
     return;
   }
 
+  abortLinePanDrag();
+  candleMinuteDetailLoading = false;
   activePriceChartMode = nextMode;
   selectedRunlengthSegmentId = "__all";
+  if(nextMode === "candlestick"){
+    syncRecommendedCandleCycle(getActiveChartInterval());
+  }
   syncChartModeButtons();
   updatePriceChartTitle();
 
@@ -1729,12 +3031,22 @@ function syncChartIntervals(sourceEl){
   if(el.dockInterval) el.dockInterval.value = value;
 }
 
+function syncCandleIntervals(sourceEl){
+  const value = sourceEl?.value;
+  if(!value) return;
+  if(el.drCandleInterval) el.drCandleInterval.value = value;
+  if(el.dockCandleInterval) el.dockCandleInterval.value = value;
+}
+
 function updateChartDockMode(){
   const shouldDock = !!selected && !!el.drawer?.classList.contains("open") && useExternalChartDock();
   if(el.chartDock) el.chartDock.classList.toggle("open", shouldDock);
   if(el.drawer) el.drawer.classList.toggle("use-external-chart", shouldDock);
   if(shouldDock && el.dockInterval && el.drInterval){
     el.dockInterval.value = el.drInterval.value;
+    if(el.dockCandleInterval && el.drCandleInterval){
+      el.dockCandleInterval.value = el.drCandleInterval.value;
+    }
   }else if(!shouldDock){
     renderRunlengthStrip([], selected);
   }
@@ -1748,18 +3060,41 @@ function getActiveChartCanvas(){
 
 function getActiveChartInterval(){
   if(isDockChartActive() && el.dockInterval) return el.dockInterval.value;
-  return el.drInterval?.value || "1m";
+  return el.drInterval?.value || "1d";
+}
+
+function getActiveCandleInterval(){
+  if(isDockChartActive() && el.dockCandleInterval) return el.dockCandleInterval.value;
+  return el.drCandleInterval?.value || "15m";
+}
+
+function isAutoMinuteDetailActive(){
+  return false;
+}
+
+function maybeLoadMinuteDetailForCandlestick(){
+  return false;
 }
 
 /* ── Chart ───────────────────────────────────────────────── */
-function loadOHLCV(sym){
-  const iv=getActiveChartInterval();
+function loadOHLCV(sym, intervalOverride = null, options = {}){
+  const onComplete = typeof options?.onComplete === "function" ? options.onComplete : null;
+  const iv = String(intervalOverride || getActiveChartInterval() || "1d").toLowerCase();
+  const isMinuteRequest = iv === "1m";
+  if(isMinuteRequest) candleMinuteDetailLoading = true;
   drawerOhlcvMeta = null;
+  drawerCandleCycleMeta = null;
   updatePriceChartTitle();
   fetch(`${API}/api/stocks/ohlcv/${encodeURIComponent(sym)}?interval=${encodeURIComponent(iv)}`)
     .then(r=>r.json())
     .then(j=>{
+      if(isMinuteRequest) candleMinuteDetailLoading = false;
       if(j.status!=="ok"){
+        const selectedIv = String(getActiveChartInterval() || "").toLowerCase();
+        if(isMinuteRequest && selectedIv !== "1m" && isCandlestickMode() && selected === sym){
+          loadOHLCV(sym);
+          return;
+        }
         renderChart([], sym);
         return;
       }
@@ -1767,15 +3102,36 @@ function loadOHLCV(sym){
       renderChart(j.data,sym);
     })
     .catch(err=>{
+      if(isMinuteRequest) candleMinuteDetailLoading = false;
       console.error("loadOHLCV error:", err);
+      const selectedIv = String(getActiveChartInterval() || "").toLowerCase();
+      if(isMinuteRequest && selectedIv !== "1m" && isCandlestickMode() && selected === sym){
+        loadOHLCV(sym);
+        return;
+      }
       drawerOhlcvMeta = null;
+      drawerCandleCycleMeta = null;
       renderChart([], sym);
+    })
+    .finally(() => {
+      if(!onComplete) return;
+      try{
+        onComplete();
+      }catch(callbackErr){
+        console.error("loadOHLCV onComplete error:", callbackErr);
+      }
     });
 }
 
 function renderChart(data,sym){
   if(!sym || !selected || _normSym(sym) !== _normSym(selected)) return;
-  const candles = normalizeCandlestickSeries(data);
+  const rawCandles = normalizeCandlestickSeries(data);
+  const cycleResult = applyCandlestickCycle(
+    rawCandles,
+    getActiveCandleInterval(),
+    { keepDetailWhenCollapsed: isVnSymbolForCandles(sym) }
+  );
+  const candles = cycleResult.candles;
   const priceSeries = normalizePriceSeries(data);
 
   if(selectedCandlesSymbol !== sym){
@@ -1784,12 +3140,14 @@ function renderChart(data,sym){
 
   drawerCandleSymbol = sym;
   drawerCandles = candles;
+  drawerCandleCycleMeta = cycleResult;
 
+  resetLineViewport();
   drawerLineSymbol = sym;
   if(priceSeries.length){
-    drawerLineSeries = priceSeries.slice(-360);
+    drawerLineSeries = priceSeries.slice(-MAX_LINE_POINTS);
   }else if(candles.length){
-    drawerLineSeries = buildRealtimeSeriesFromCandles(candles).slice(-360);
+    drawerLineSeries = buildRealtimeSeriesFromCandles(candles).slice(-MAX_LINE_POINTS);
   }else{
     drawerLineSeries = [];
   }
@@ -1798,6 +3156,8 @@ function renderChart(data,sym){
   if(rt && Number.isFinite(Number(rt.price))){
     upsertRealtimeLinePoint(sym, Number(rt.price), rt.date || new Date());
   }
+
+  drawerLineSeries = sanitizeRealtimeSeries(sym, drawerLineSeries);
 
   redrawActivePriceChart();
 }
@@ -1996,9 +3356,40 @@ function renderChangepointChart(data, sym){
 }
 
 /* ── Matched Orders ──────────────────────────────────────── */
+function setMarketOrderbookLoading(){
+  if(el.mobDepthBody){
+    el.mobDepthBody.innerHTML = [1, 2, 3].map(() => (
+      '<div class="mob-depth-item"><span class="mob-col-empty">--</span><span class="mob-col-empty">--</span><span class="mob-col-empty">--</span><span class="mob-col-empty">--</span></div>'
+    )).join("");
+  }
+  if(el.mobBuyForceLbl) el.mobBuyForceLbl.textContent = "Lực mua --%";
+  if(el.mobSellForceLbl) el.mobSellForceLbl.textContent = "Lực bán --%";
+  if(el.mobBuyForceBar) el.mobBuyForceBar.style.width = "50%";
+  if(el.mobSellForceBar) el.mobSellForceBar.style.width = "50%";
+}
+
+function setMoLotMode(mode, rerender = true){
+  moLotMode = mode === "odd" ? "odd" : "round";
+  if(el.mobRoundBtn) el.mobRoundBtn.classList.toggle("active", moLotMode === "round");
+  if(el.mobOddBtn) el.mobOddBtn.classList.toggle("active", moLotMode === "odd");
+  if(rerender && moLastRows.length){
+    renderMatchedOrders(moLastRows, moLastTotalCount, false);
+  }
+}
+
 function loadMatchedOrders(sym){
   el.moBody.innerHTML='<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Đang tải …</td></tr>';
-  el.moTotalVal.textContent='--';
+  if(el.moMeta) el.moMeta.textContent = 'Đang cập nhật...';
+  if(el.moBuyVal) el.moBuyVal.textContent = '--';
+  if(el.moTotalVal) el.moTotalVal.textContent = '--';
+  if(el.moSellVal) el.moSellVal.textContent = '--';
+  if(el.moBuyPct) el.moBuyPct.textContent = '--%';
+  if(el.moSellPct) el.moSellPct.textContent = '--%';
+  if(el.moBuyBar) el.moBuyBar.style.width = '50%';
+  if(el.moSellBar) el.moSellBar.style.width = '50%';
+  setMarketOrderbookLoading();
+  moLastRows = [];
+  moLastTotalCount = 0;
   // Clear previous timer
   if(moTimer){clearInterval(moTimer);moTimer=null;}
 
@@ -2007,7 +3398,7 @@ function loadMatchedOrders(sym){
     fetch(`${API}/api/stocks/matched-orders/${sym}?limit=50`)
       .then(r=>r.json())
       .then(j=>{
-        if(j.status==="ok") renderMatchedOrders(j.data, j.total_count);
+        if(j.status==="ok") renderMatchedOrders(j.data, j.total_count, true);
         else console.warn("matched-orders bad response:", j);
       })
       .catch(err=>console.error("matched-orders fetch error:", err));
@@ -2017,29 +3408,314 @@ function loadMatchedOrders(sym){
   moTimer=setInterval(()=>{if(selected===sym)doLoad();else{clearInterval(moTimer);moTimer=null;}},3000);
 }
 
-function renderMatchedOrders(data, totalCount){
+function inferMatchedOrderSide(rows, idx, fallbackSide = "buy"){
+  const row = rows[idx] || {};
+  const prev = idx > 0 ? rows[idx - 1] : null;
+  const next = idx + 1 < rows.length ? rows[idx + 1] : null;
+
+  const currPrice = Number(row.price);
+  const prevPrice = Number(prev?.price);
+  const nextPrice = Number(next?.price);
+
+  if(Number.isFinite(currPrice) && Number.isFinite(prevPrice) && currPrice !== prevPrice){
+    return currPrice > prevPrice ? "buy" : "sell";
+  }
+  if(Number.isFinite(currPrice) && Number.isFinite(nextPrice) && currPrice !== nextPrice){
+    return currPrice > nextPrice ? "buy" : "sell";
+  }
+
+  const change = Number(row.change);
+  if(Number.isFinite(change) && change !== 0){
+    return change > 0 ? "buy" : "sell";
+  }
+
+  const changePct = Number(row.change_percent);
+  if(Number.isFinite(changePct) && changePct !== 0){
+    return changePct > 0 ? "buy" : "sell";
+  }
+
+  return fallbackSide;
+}
+
+function fmtVolVn(v){
+  const n = Number(v);
+  if(!Number.isFinite(n)) return "0";
+  return Math.max(0, Math.round(n)).toLocaleString("vi-VN");
+}
+
+function resolveMatchedOrderSize(rows, idx){
+  const row = rows[idx] || {};
+
+  const matchedSize = Number(row.matched_size);
+  if(Number.isFinite(matchedSize) && matchedSize > 0){
+    return matchedSize;
+  }
+
+  const lastSize = Number(row.last_size);
+  if(Number.isFinite(lastSize) && lastSize > 0){
+    return lastSize;
+  }
+
+  const curDayVolume = Number(row.day_volume);
+  const nextDayVolume = Number(rows[idx + 1]?.day_volume);
+  if(Number.isFinite(curDayVolume) && Number.isFinite(nextDayVolume)){
+    const delta = curDayVolume - nextDayVolume;
+    if(delta > 0) return delta;
+  }
+
+  return 0;
+}
+
+function getMatchedEpochMs(row){
+  const producer = Number(row?.producer_timestamp);
+  if(Number.isFinite(producer) && producer > 0){
+    return producer < 10_000_000_000 ? producer * 1000 : producer;
+  }
+
+  const ts = row?.timestamp;
+  if(typeof ts === "number" && Number.isFinite(ts)){
+    return ts < 10_000_000_000 ? ts * 1000 : ts;
+  }
+  if(typeof ts === "string"){
+    const raw = ts.trim();
+    if(/^\d+$/.test(raw)){
+      let iv = Number(raw);
+      if(Number.isFinite(iv)){
+        if(iv < 10_000_000_000) iv *= 1000;
+        return iv;
+      }
+    }
+  }
+
+  const d = parseChartTime(ts);
+  return d ? d.getTime() : -1;
+}
+
+function isMatchedRowInLotMode(size){
+  if(!Number.isFinite(size) || size <= 0) return false;
+  if(moLotMode === "odd"){
+    return size < 100 || (size % 100 !== 0);
+  }
+  return size >= 100 && (size % 100 === 0);
+}
+
+function fmtOrderbookPrice(price){
+  const p = Number(price);
+  if(!Number.isFinite(p)) return "--";
+  const decimals = Math.abs(p - Math.round(p)) < 1e-8 ? 0 : 2;
+  return fmt(p, decimals);
+}
+
+function renderMarketOrderbook(rows, buyVolume, sellVolume){
+  if(!el.mobDepthBody) return;
+
+  const hasPositiveVolume = (rows || []).some(r => Number.isFinite(Number(r?.size)) && Number(r.size) > 0);
+
+  const buyMap = new Map();
+  const sellMap = new Map();
+  const buyPriceOnly = new Map();
+  const sellPriceOnly = new Map();
+  rows.forEach(row => {
+    const price = Number(row.price);
+    if(!Number.isFinite(price)) return;
+
+    if(row.side === "buy"){
+      buyPriceOnly.set(price, (buyPriceOnly.get(price) || 0) + 1);
+    }else if(row.side === "sell"){
+      sellPriceOnly.set(price, (sellPriceOnly.get(price) || 0) + 1);
+    }
+
+    if(!hasPositiveVolume) return;
+
+    const rowSize = Number(row.size);
+    if(!Number.isFinite(rowSize) || rowSize <= 0) return;
+
+    if(row.side === "buy"){
+      buyMap.set(price, (buyMap.get(price) || 0) + rowSize);
+    }else if(row.side === "sell"){
+      sellMap.set(price, (sellMap.get(price) || 0) + rowSize);
+    }
+  });
+
+  const buyLevels = hasPositiveVolume
+    ? [...buyMap.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .slice(0, 3)
+      .map(([price, size]) => ({ price, size }))
+    : [...buyPriceOnly.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .slice(0, 3)
+      .map(([price]) => ({ price, size: null }));
+  const sellLevels = hasPositiveVolume
+    ? [...sellMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .slice(0, 3)
+      .map(([price, size]) => ({ price, size }))
+    : [...sellPriceOnly.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .slice(0, 3)
+      .map(([price]) => ({ price, size: null }));
+
+  const rowCount = Math.max(3, buyLevels.length, sellLevels.length);
+  const hasDepth = buyLevels.length || sellLevels.length;
+
+  el.mobDepthBody.innerHTML = Array.from({ length: rowCount }, (_, idx) => {
+    const b = buyLevels[idx];
+    const s = sellLevels[idx];
+    const buyVol = b && hasPositiveVolume ? fmtVolVn(b.size) : "--";
+    const buyPrice = b ? fmtOrderbookPrice(b.price) : "--";
+    const sellPrice = s ? fmtOrderbookPrice(s.price) : "--";
+    const sellVol = s && hasPositiveVolume ? fmtVolVn(s.size) : "--";
+    const buyCls = b ? "mob-col-buy-vol" : "mob-col-empty";
+    const buyPriceCls = b ? "mob-col-buy-price" : "mob-col-empty";
+    const sellPriceCls = s ? "mob-col-sell-price" : "mob-col-empty";
+    const sellCls = s ? "mob-col-sell-vol" : "mob-col-empty";
+    return `<div class="mob-depth-item">
+      <span class="${buyCls}">${buyVol}</span>
+      <span class="${buyPriceCls}">${buyPrice}</span>
+      <span class="${sellPriceCls}">${sellPrice}</span>
+      <span class="${sellCls}">${sellVol}</span>
+    </div>`;
+  }).join("");
+
+  const total = buyVolume + sellVolume;
+  const hasVolumeRatio = total > 0;
+  const buyPct = hasVolumeRatio ? (buyVolume / total) * 100 : 0;
+  const sellPct = hasVolumeRatio ? (sellVolume / total) * 100 : 0;
+  const buyText = hasVolumeRatio ? buyPct.toFixed(0) : "--";
+  const sellText = hasVolumeRatio ? sellPct.toFixed(0) : "--";
+
+  if(el.mobBuyForceLbl) el.mobBuyForceLbl.textContent = `Lực mua ${buyText}%`;
+  if(el.mobSellForceLbl) el.mobSellForceLbl.textContent = `Lực bán ${sellText}%`;
+  if(el.mobBuyForceBar) el.mobBuyForceBar.style.width = hasVolumeRatio ? `${buyPct}%` : "50%";
+  if(el.mobSellForceBar) el.mobSellForceBar.style.width = hasVolumeRatio ? `${sellPct}%` : "50%";
+}
+
+function renderMatchedOrders(data, totalCount, remember = true){
+  if(remember){
+    moLastRows = Array.isArray(data) ? data.slice() : [];
+    moLastTotalCount = totalCount != null ? Number(totalCount) : moLastRows.length;
+  }
+
   if(!data||!data.length){
     el.moBody.innerHTML='<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Chưa có dữ liệu</td></tr>';
-    el.moTotalVal.textContent='0';
+    if(el.moMeta) el.moMeta.textContent = '0 lệnh';
+    if(el.moBuyVal) el.moBuyVal.textContent = '0';
+    if(el.moTotalVal) el.moTotalVal.textContent = '0';
+    if(el.moSellVal) el.moSellVal.textContent = '0';
+    if(el.moBuyPct) el.moBuyPct.textContent = '0%';
+    if(el.moSellPct) el.moSellPct.textContent = '0%';
+    if(el.moBuyBar) el.moBuyBar.style.width = '0%';
+    if(el.moSellBar) el.moSellBar.style.width = '0%';
+    renderMarketOrderbook([], 0, 0);
     return;
   }
-  el.moBody.innerHTML=data.map(d=>{
-    const ts = d.timestamp ? new Date(Number(d.timestamp)) : null;
-    const timeStr = ts && !isNaN(ts) ? ts.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "--";
-    const price = d.price;
-    const lastSize = d.last_size;
-    const change = d.change;
-    const pCls = change > 0 ? "mo-price-up" : change < 0 ? "mo-price-down" : "mo-price-flat";
-    const cCls = change > 0 ? "mo-change-up" : change < 0 ? "mo-change-down" : "mo-change-flat";
-    const borderCls = change > 0 ? "mo-row-border-up" : change < 0 ? "mo-row-border-down" : "";
-    return `<tr class="${borderCls}">
-      <td>${timeStr}</td>
-      <td class="${pCls}">${price!=null?fmt(price,2):"--"}</td>
-      <td class="mo-size">${lastSize!=null?Number(lastSize).toLocaleString():"0"}</td>
-      <td class="${cCls}">${change!=null?fmt(change,2):"--"}</td>
+
+  const sortedData = data
+    .slice()
+    .sort((a, b) => getMatchedEpochMs(b) - getMatchedEpochMs(a));
+
+  let carrySide = "buy";
+
+  const rows = sortedData.map((d, idx) => {
+    const ts = parseChartTime(d.timestamp) || parseChartTime(d.producer_timestamp);
+    const timeStr = ts
+      ? ts.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",second:"2-digit"})
+      : "--";
+    const side = inferMatchedOrderSide(sortedData, idx, carrySide);
+    carrySide = side;
+
+    const size = Math.max(0, Math.round(resolveMatchedOrderSize(sortedData, idx)));
+
+    return {
+      ...d,
+      timeStr,
+      side,
+      size,
+    };
+  });
+
+  const roundRows = rows.filter(r => Number.isFinite(r.size) && r.size > 0 && r.size >= 100 && (r.size % 100 === 0));
+  const oddRows = rows.filter(r => Number.isFinite(r.size) && r.size > 0 && (r.size < 100 || (r.size % 100 !== 0)));
+  let effectiveLotMode = moLotMode;
+  let lotLabel = effectiveLotMode === "odd" ? "lô lẻ" : "lô chẵn";
+  let fallbackNote = "";
+  let lotClassified = true;
+  let filteredRows = (effectiveLotMode === "odd" ? oddRows : roundRows).slice(0, 50);
+
+  if(!filteredRows.length){
+    const altMode = effectiveLotMode === "odd" ? "round" : "odd";
+    const altRows = altMode === "odd" ? oddRows : roundRows;
+    if(altRows.length){
+      effectiveLotMode = altMode;
+      filteredRows = altRows.slice(0, 50);
+      setMoLotMode(effectiveLotMode, false);
+      lotLabel = effectiveLotMode === "odd" ? "lô lẻ" : "lô chẵn";
+      fallbackNote = " • tự chuyển sang lô có dữ liệu";
+    }else{
+      filteredRows = rows.slice(0, 50);
+      lotClassified = false;
+      lotLabel = "không xác định lô";
+      fallbackNote = " • dữ liệu khối lượng chưa đủ";
+    }
+  }
+
+  if(!filteredRows.length){
+    el.moBody.innerHTML='<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Chưa có dữ liệu khớp lệnh</td></tr>';
+    if(el.moMeta) el.moMeta.textContent = '0 lệnh';
+    if(el.moBuyVal) el.moBuyVal.textContent = '0';
+    if(el.moTotalVal) el.moTotalVal.textContent = '0';
+    if(el.moSellVal) el.moSellVal.textContent = '0';
+    if(el.moBuyPct) el.moBuyPct.textContent = '0%';
+    if(el.moSellPct) el.moSellPct.textContent = '0%';
+    if(el.moBuyBar) el.moBuyBar.style.width = '0%';
+    if(el.moSellBar) el.moSellBar.style.width = '0%';
+    renderMarketOrderbook([], 0, 0);
+    return;
+  }
+
+  let buyVolume = 0;
+  let sellVolume = 0;
+  filteredRows.forEach(d => {
+    if(d.side === "buy") buyVolume += d.size;
+    else sellVolume += d.size;
+  });
+  const hasEstimatedSize = filteredRows.some(d => (
+    d.matched_size_source === "minute_volume_est" || d.matched_size_source === "daily_volume_est"
+  ));
+
+  el.moBody.innerHTML=filteredRows.map(d=>{
+    const sideLabel = d.side === "buy" ? "Mua" : "Bán";
+    const sideCls = d.side === "buy" ? "buy" : "sell";
+    const priceCls = d.side === "buy" ? "mo-price-buy" : "mo-price-sell";
+    return `<tr>
+      <td class="mo-time">${d.timeStr}</td>
+      <td><span class="mo-side-badge ${sideCls}">${sideLabel}</span></td>
+      <td class="mo-size">${d.size > 0 ? fmtVolVn(d.size) : "--"}</td>
+      <td class="${priceCls}">${d.price!=null?fmt(d.price,2):"--"}</td>
     </tr>`;
   }).join("");
-  el.moTotalVal.textContent = totalCount!=null ? Number(totalCount).toLocaleString() : data.length.toLocaleString();
+
+  const totalVolume = buyVolume + sellVolume;
+  const buyPct = totalVolume > 0 ? (buyVolume / totalVolume) * 100 : 0;
+  const sellPct = totalVolume > 0 ? (sellVolume / totalVolume) * 100 : 0;
+  const hasVolume = totalVolume > 0;
+
+  if(el.moMeta){
+    const totalRows = totalCount!=null ? Number(totalCount) : filteredRows.length;
+    const lotText = lotClassified ? lotLabel : "gần nhất";
+    const estimateNote = hasEstimatedSize ? " • khối lượng ước tính" : "";
+    el.moMeta.textContent = `${filteredRows.length} lệnh ${lotText} • Tổng bản ghi: ${totalRows.toLocaleString("vi-VN")}${fallbackNote}${estimateNote}`;
+  }
+  if(el.moBuyVal) el.moBuyVal.textContent = hasVolume ? fmtVolVn(buyVolume) : '--';
+  if(el.moTotalVal) el.moTotalVal.textContent = hasVolume ? fmtVolVn(totalVolume) : '--';
+  if(el.moSellVal) el.moSellVal.textContent = hasVolume ? fmtVolVn(sellVolume) : '--';
+  if(el.moBuyPct) el.moBuyPct.textContent = hasVolume ? `${buyPct.toFixed(0)}%` : '--%';
+  if(el.moSellPct) el.moSellPct.textContent = hasVolume ? `${sellPct.toFixed(0)}%` : '--%';
+  if(el.moBuyBar) el.moBuyBar.style.width = hasVolume ? `${buyPct}%` : '50%';
+  if(el.moSellBar) el.moSellBar.style.width = hasVolume ? `${sellPct}%` : '50%';
+
+  renderMarketOrderbook(filteredRows, buyVolume, sellVolume);
 }
 
 /* ── Drawer News ─────────────────────────────────────────── */
@@ -2167,6 +3843,9 @@ document.getElementById('marketFilterGroup')?.addEventListener('click',e=>{
   marketFilter=btn.dataset.market||'';
   renderTable();updateStats();
 });
+el.mobRoundBtn?.addEventListener("click",()=>setMoLotMode("round"));
+el.mobOddBtn?.addEventListener("click",()=>setMoLotMode("odd"));
+setMoLotMode(moLotMode, false);
 el.drawerClose.addEventListener("click",closeDrawer);
 el.overlay.addEventListener("click",closeDrawer);
 const onChartModeClick = event => {
@@ -2178,11 +3857,16 @@ el.drChartMode?.addEventListener("click", onChartModeClick);
 el.dockChartMode?.addEventListener("click", onChartModeClick);
 const onCandleCanvasClick = event => {
   if(!selected || !isCandlestickMode()) return;
+  if(candleDragSelection.active) return;
+  if(candlePanDrag.active) return;
+  if(candleDragSelection.suppressClickUntil > Date.now()) return;
+  if(candlePanDrag.suppressClickUntil > Date.now()) return;
+
   const canvas = event.currentTarget;
   if(canvas !== getActiveChartCanvas()) return;
 
-  const state = activeCandleHitState;
-  if(!state || state.canvasId !== canvas.id || state.symbol !== selected || !state.candles?.length) return;
+  const state = getCandlestickStateForCanvas(canvas);
+  if(!state) return;
 
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
@@ -2190,7 +3874,8 @@ const onCandleCanvasClick = event => {
   if(x < state.padLeft || x > state.padLeft + state.plotWidth) return;
   if(y < state.padTop || y > state.padTop + state.plotHeight) return;
 
-  const idx = Math.max(0, Math.min(state.candles.length - 1, Math.floor((x - state.padLeft) / state.step)));
+  const idx = getCandleIndexFromClientX(state, canvas, event.clientX, false);
+  if(idx < 0) return;
   const candle = state.candles[idx];
   if(!candle) return;
 
@@ -2198,21 +3883,131 @@ const onCandleCanvasClick = event => {
   renderCandleSelectionInfo();
   redrawActiveCandlestickChart();
 };
-const onCandleCanvasWheel = event => {
-  if((!event.ctrlKey && !event.shiftKey && !event.metaKey) || !selected || !isCandlestickMode()) return;
+const onCandleCanvasMouseDown = event => {
+  if(event.button !== 0 || !selected) return;
+
   const canvas = event.currentTarget;
   if(canvas !== getActiveChartCanvas()) return;
+
+  if(!isCandlestickMode()){
+    if(beginLinePanDrag(canvas, event.clientX)){
+      event.preventDefault();
+    }
+    return;
+  }
+
+  const state = getCandlestickStateForCanvas(canvas);
+  if(!state) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  if(x < state.padLeft || x > state.padLeft + state.plotWidth) return;
+  if(y < state.padTop || y > state.padTop + state.plotHeight) return;
+
+  const idx = getCandleIndexFromClientX(state, canvas, event.clientX, false);
+  if(idx < 0) return;
+
+  if(event.altKey || event.shiftKey){
+    beginCandlePanDrag(canvas, event.clientX);
+  }else{
+    beginCandleDragSelection(canvas, state, idx);
+  }
+  event.preventDefault();
+};
+const onWindowCandleMouseMove = event => {
+  if(linePanDrag.active){
+    if(event.buttons === 0){
+      finishLinePanDrag();
+      return;
+    }
+    if(updateLinePanDrag(event.clientX)){
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if(candlePanDrag.active){
+    if(event.buttons === 0){
+      finishCandlePanDrag();
+      return;
+    }
+    if(updateCandlePanDrag(event.clientX)){
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if(!candleDragSelection.active) return;
+  if(event.buttons === 0){
+    finishCandleDragSelection();
+    return;
+  }
+  if(updateCandleDragSelection(event.clientX)){
+    event.preventDefault();
+  }
+};
+const onWindowCandleMouseUp = event => {
+  if(linePanDrag.active){
+    finishLinePanDrag();
+    return;
+  }
+
+  if(candlePanDrag.active){
+    finishCandlePanDrag();
+    return;
+  }
+
+  if(!candleDragSelection.active) return;
+  finishCandleDragSelection(event.clientX);
+};
+const onCandleCanvasWheel = event => {
+  if((!event.ctrlKey && !event.shiftKey && !event.metaKey) || !selected) return;
+  const canvas = event.currentTarget;
+  if(canvas !== getActiveChartCanvas()) return;
+  const primaryDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+
+  if(!isCandlestickMode()){
+    if(event.ctrlKey || event.metaKey){
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const focusRatio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5;
+      const zoomIn = primaryDelta < 0;
+      if(zoomLineViewport(zoomIn, focusRatio)){
+        refreshRealtimeLineViewport();
+      }else if(!zoomIn){
+        tryAutoExpandLineHistory("zoom-out");
+      }
+      return;
+    }
+
+    if(event.shiftKey){
+      event.preventDefault();
+      const direction = primaryDelta > 0 ? 1 : -1;
+      if(panLineViewport(direction)){
+        refreshRealtimeLineViewport();
+      }else if(direction < 0){
+        tryAutoExpandLineHistory("pan-left");
+      }
+    }
+    return;
+  }
+
   if(!drawerCandles?.length || drawerCandleSymbol !== selected) return;
 
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const focusRatio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5;
-  const primaryDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
 
   if(event.ctrlKey || event.metaKey){
     const zoomIn = primaryDelta < 0;
     if(zoomCandlestickViewport(zoomIn, focusRatio)){
       redrawActiveCandlestickChart();
+      if(zoomIn){
+        maybeLoadMinuteDetailForCandlestick();
+      }
+    }else if(zoomIn){
+      maybeLoadMinuteDetailForCandlestick();
     }
     return;
   }
@@ -2224,10 +4019,19 @@ const onCandleCanvasWheel = event => {
     }
   }
 };
+el.drChart?.addEventListener("mousedown", onCandleCanvasMouseDown);
+el.dockChart?.addEventListener("mousedown", onCandleCanvasMouseDown);
 el.drChart?.addEventListener("click", onCandleCanvasClick);
 el.dockChart?.addEventListener("click", onCandleCanvasClick);
 el.drChart?.addEventListener("wheel", onCandleCanvasWheel, { passive: false });
 el.dockChart?.addEventListener("wheel", onCandleCanvasWheel, { passive: false });
+window.addEventListener("mousemove", onWindowCandleMouseMove);
+window.addEventListener("mouseup", onWindowCandleMouseUp);
+window.addEventListener("blur", () => {
+  if(linePanDrag.active) finishLinePanDrag();
+  if(candlePanDrag.active) finishCandlePanDrag();
+  if(candleDragSelection.active) finishCandleDragSelection();
+});
 const onCandleInfoAction = event => {
   const trigger = event.target.closest('[data-action="clear-candle-select"]');
   if(!trigger || !selected) return;
@@ -2239,20 +4043,46 @@ el.drCandleInfo?.addEventListener("click", onCandleInfoAction);
 el.dockCandleInfo?.addEventListener("click", onCandleInfoAction);
 el.drInterval.addEventListener("change",()=>{
   syncChartIntervals(el.drInterval);
+  candleCycleAuto = true;
+  syncRecommendedCandleCycle(getActiveChartInterval(), { force: true });
   selectedRunlengthSegmentId = "__all";
+  candleMinuteDetailLoading = false;
   resetCandleViewport();
+  resetLineViewport();
   if(selected) resetSelectedCandles(selected);
   renderCandleSelectionInfo();
   if(selected)loadOHLCV(selected);
 });
 el.dockInterval?.addEventListener("change",()=>{
   syncChartIntervals(el.dockInterval);
+  candleCycleAuto = true;
+  syncRecommendedCandleCycle(getActiveChartInterval(), { force: true });
   selectedRunlengthSegmentId = "__all";
+  candleMinuteDetailLoading = false;
   resetCandleViewport();
+  resetLineViewport();
   if(selected) resetSelectedCandles(selected);
   renderCandleSelectionInfo();
   if(selected)loadOHLCV(selected);
 });
+const onCandleIntervalChange = sourceEl => {
+  candleCycleAuto = false;
+  syncCandleIntervals(sourceEl);
+  selectedRunlengthSegmentId = "__all";
+  candleMinuteDetailLoading = false;
+  resetCandleViewport();
+  if(selected) resetSelectedCandles(selected);
+  renderCandleSelectionInfo();
+
+  if(!selected) return;
+  if(isCandlestickMode()){
+    loadOHLCV(selected);
+  }else{
+    updatePriceChartTitle();
+  }
+};
+el.drCandleInterval?.addEventListener("change",()=>onCandleIntervalChange(el.drCandleInterval));
+el.dockCandleInterval?.addEventListener("change",()=>onCandleIntervalChange(el.dockCandleInterval));
 el.dockRunlengthStrip?.addEventListener("click",event=>{
   const chip = event.target.closest(".rl-chip");
   if(!chip || !selected || !isCandlestickMode()) return;
@@ -2270,19 +4100,38 @@ document.addEventListener("keydown",e=>{
     return;
   }
   if(e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")){
-    if(!selected || !isCandlestickMode() || !el.drawer?.classList.contains("open")) return;
+    if(!selected || !el.drawer?.classList.contains("open")) return;
     e.preventDefault();
     const direction = e.key === "ArrowRight" ? 1 : -1;
-    if(panCandlestickViewport(direction)){
-      redrawActiveCandlestickChart();
+    if(isCandlestickMode()){
+      if(panCandlestickViewport(direction)){
+        redrawActiveCandlestickChart();
+      }
+    }else{
+      if(panLineViewport(direction)){
+        refreshRealtimeLineViewport();
+      }else if(direction < 0){
+        tryAutoExpandLineHistory("key-left");
+      }
     }
     return;
   }
   if((e.ctrlKey || e.metaKey) && (e.key === "0" || e.code === "Digit0")){
-    if(!selected || !isCandlestickMode() || !el.drawer?.classList.contains("open")) return;
+    if(!selected || !el.drawer?.classList.contains("open")) return;
     e.preventDefault();
-    resetCandleViewport();
-    redrawActiveCandlestickChart();
+    if(isCandlestickMode()){
+      candleMinuteDetailLoading = false;
+      if(isAutoMinuteDetailActive()){
+        resetCandleViewport();
+        loadOHLCV(selected);
+      }else{
+        resetCandleViewport();
+        redrawActiveCandlestickChart();
+      }
+    }else{
+      resetLineViewport();
+      refreshRealtimeLineViewport();
+    }
   }
 });
 window.addEventListener("resize",()=>{
@@ -2844,7 +4693,7 @@ function renderVolumeTop10Chart(){
         const meta=chart.getDatasetMeta(0);
         meta.data.forEach((bar,i)=>{
           const val=volumes[i];
-          const isDark=!document.documentElement.getAttribute('data-theme')||document.documentElement.getAttribute('data-theme')==='dark';
+          const isDark=document.documentElement.getAttribute('data-theme')==='dark';
           ctx.fillStyle=isDark?'#c3c8d8':'#374151';
           ctx.font='600 11px "JetBrains Mono", monospace';
           ctx.textAlign='left';
@@ -3121,6 +4970,83 @@ function renderOverviewAbnormalBoard(){
 let wlPriceChart = null;
 let wlAllNews = [];
 const chartColors = ['#f44336','#2196f3','#4caf50','#ff9800','#9c27b0','#00bcd4','#e91e63','#8bc34a','#ffc107','#673ab7'];
+let wlCardRefreshFrame = null;
+const wlCardRefreshQueue = new Set();
+let wlSignalSignature = "";
+
+function watchlistCardSelector(sym){
+  const escaped = String(sym || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `.wl-stock-card[data-sym="${escaped}"]`;
+}
+
+function scheduleWatchlistCardRefresh(symbols){
+  (symbols || []).forEach(sym => {
+    if(sym) wlCardRefreshQueue.add(String(sym));
+  });
+  if(!wlCardRefreshQueue.size || wlCardRefreshFrame != null) return;
+
+  wlCardRefreshFrame = requestAnimationFrame(() => {
+    wlCardRefreshFrame = null;
+    const pending = [...wlCardRefreshQueue];
+    wlCardRefreshQueue.clear();
+    pending.forEach(sym => updateWatchlistCard(sym));
+  });
+}
+
+function updateWatchlistCard(sym){
+  const card = document.querySelector(watchlistCardSelector(sym));
+  const s = stocks[sym];
+  if(!card || !s) return;
+
+  const c = cls(s?.pct);
+  const vol = s?.volume ? fmtV(s.volume) : '--';
+  const cp = cpSignals[sym] || null;
+  const cpClass = !cp ? 'unknown' : cp.regime_label === 'whale-watch' ? 'up' : cp.regime_label === 'transition' ? 'flat' : 'down';
+  const cpLabel = !cp ? 'Chua co' : cp.regime_label === 'whale-watch' ? 'Whale' : cp.regime_label === 'transition' ? 'Transition' : 'Stable';
+  const ml = getSymbolMlForecast(sym);
+
+  const priceEl = card.querySelector('[data-role="price"]');
+  if(priceEl){
+    priceEl.className = `wl-card-price ${c}`;
+    priceEl.textContent = fmt(s.price);
+  }
+
+  const pctEl = card.querySelector('[data-role="pct"]');
+  if(pctEl){
+    pctEl.className = `wl-card-change ${c}`;
+    pctEl.textContent = `${s.pct >= 0 ? '+' : ''}${fmt(s.pct)}%`;
+  }
+
+  const cpLabelEl = card.querySelector('[data-role="cpLabel"]');
+  if(cpLabelEl){
+    cpLabelEl.className = `cp-pill ${cpClass}`;
+    cpLabelEl.textContent = cpLabel;
+  }
+
+  const cpMetaEl = card.querySelector('[data-role="cpMeta"]');
+  if(cpMetaEl){
+    cpMetaEl.textContent = cp ? `CP ${fmtProb(cp.cp_prob)} · r ${fmt(cp.expected_run_length,1)}` : 'BOCPD --';
+  }
+
+  const mlEl = card.querySelector('[data-role="ml"]');
+  if(mlEl){
+    mlEl.className = `wl-card-mono wl-card-ml ${ml ? ml.klass : ''}`.trim();
+    mlEl.textContent = ml
+      ? `ML ${ml.directionLabel} ${ml.expectedText} · up ${fmtProb(ml.probUp)} / down ${fmtProb(ml.probDown)}`
+      : 'ML --';
+  }
+
+  const volEl = card.querySelector('[data-role="vol"]');
+  if(volEl){
+    volEl.textContent = vol;
+  }
+
+  const chgEl = card.querySelector('[data-role="chgAbs"]');
+  if(chgEl){
+    chgEl.className = `wl-stat-value ${c}`;
+    chgEl.textContent = `${s.change >= 0 ? '+' : ''}${fmt(s.change)}`;
+  }
+}
 
 function loadWatchlist(){
   const content = document.getElementById('watchlistContent');
@@ -3150,7 +5076,7 @@ function loadWatchlist(){
     const cpClass = !cp ? 'unknown' : cp.regime_label === 'whale-watch' ? 'up' : cp.regime_label === 'transition' ? 'flat' : 'down';
     const cpLabel = !cp ? 'Chua co' : cp.regime_label === 'whale-watch' ? 'Whale' : cp.regime_label === 'transition' ? 'Transition' : 'Stable';
     const ml = getSymbolMlForecast(sym);
-    return `<div class="wl-stock-card" onclick="openDrawer('${sym}')">
+    return `<div class="wl-stock-card" data-sym="${sym}" onclick="openDrawer('${sym}')">
       <div class="wl-card-top">
         <div>
           <div class="wl-card-sym">${sym}</div>
@@ -3160,26 +5086,26 @@ function loadWatchlist(){
       </div>
       <div class="wl-card-row">
         <div class="wl-card-label">Giá hiện tại</div>
-        <div class="wl-card-price ${c}">${s?fmt(s.price):'--'}</div>
+        <div class="wl-card-price ${c}" data-role="price">${s?fmt(s.price):'--'}</div>
       </div>
       <div class="wl-card-row">
         <div class="wl-card-label">Thay đổi</div>
-        <div class="wl-card-change ${c}">${s?((s.pct>=0?'+':'')+fmt(s.pct)+'%'):'--'}</div>
+        <div class="wl-card-change ${c}" data-role="pct">${s?((s.pct>=0?'+':'')+fmt(s.pct)+'%'):'--'}</div>
       </div>
       <div class="wl-card-signal">
-        <span class="cp-pill ${cpClass}">${cpLabel}</span>
-        <span class="wl-card-mono">${cp ? `CP ${fmtProb(cp.cp_prob)} · r ${fmt(cp.expected_run_length,1)}` : 'BOCPD --'}</span>
+        <span class="cp-pill ${cpClass}" data-role="cpLabel">${cpLabel}</span>
+        <span class="wl-card-mono" data-role="cpMeta">${cp ? `CP ${fmtProb(cp.cp_prob)} · r ${fmt(cp.expected_run_length,1)}` : 'BOCPD --'}</span>
       </div>
-      <div class="wl-card-mono wl-card-ml ${ml ? ml.klass : ''}">
+      <div class="wl-card-mono wl-card-ml ${ml ? ml.klass : ''}" data-role="ml">
         ${ml ? `ML ${ml.directionLabel} ${ml.expectedText} · up ${fmtProb(ml.probUp)} / down ${fmtProb(ml.probDown)}` : 'ML --'}
       </div>
       <div class="wl-card-stats">
         <div class="wl-stat-item">
-          <div class="wl-stat-value">${vol}</div>
+          <div class="wl-stat-value" data-role="vol">${vol}</div>
           <div class="wl-stat-label">KLGD</div>
         </div>
         <div class="wl-stat-item">
-          <div class="wl-stat-value ${c}">${s?(s.change>=0?'+':'')+fmt(s.change):'--'}</div>
+          <div class="wl-stat-value ${c}" data-role="chgAbs">${s?(s.change>=0?'+':'')+fmt(s.change):'--'}</div>
           <div class="wl-stat-label">+/- điểm</div>
         </div>
       </div>
@@ -3306,7 +5232,6 @@ function renderWatchlistSignalChart(symbols){
   const canvas = document.getElementById('wlSignalChart');
   const legendEl = document.getElementById('wlSignalLegend');
   if(!canvas) return;
-  if(wlSignalChart){ wlSignalChart.destroy(); wlSignalChart = null; }
 
   const rows = symbols
     .map(sym => ({ symbol: sym, signal: cpSignals[sym] }))
@@ -3320,6 +5245,10 @@ function renderWatchlistSignalChart(symbols){
       ml: getSymbolMlForecast(item.symbol),
     }));
 
+  const signature = rows.map(row =>
+    `${row.symbol}:${row.cp_prob.toFixed(4)}:${row.run_length.toFixed(4)}:${row.whale_score.toFixed(4)}:${row.regime_label}`
+  ).join('|');
+
   if(legendEl){
     legendEl.innerHTML = rows.length
       ? rows.map(row => `<div class="wl-legend-item">
@@ -3330,9 +5259,18 @@ function renderWatchlistSignalChart(symbols){
   }
 
   if(!rows.length){
+    wlSignalSignature = "";
+    if(wlSignalChart){ wlSignalChart.destroy(); wlSignalChart = null; }
     drawCanvasEmpty(canvas, 'Chua co du lieu BOCPD cho watchlist');
     return;
   }
+
+  if(wlSignalChart && signature === wlSignalSignature){
+    return;
+  }
+
+  wlSignalSignature = signature;
+  if(wlSignalChart){ wlSignalChart.destroy(); wlSignalChart = null; }
 
   wlSignalChart = new Chart(canvas, {
     data: {

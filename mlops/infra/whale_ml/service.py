@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
@@ -7,34 +6,98 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from logging_setup import get_logger
 from modeling import WhaleMoveForecaster
 
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+logger = get_logger(
+    logs_dir="/var/log/whale_ml",
+    log_filename="whale_ml.log",
+    keep_days=30,
 )
-logger = logging.getLogger("whale_ml.service")
 
 AUTO_TRAIN_ON_STARTUP = os.getenv("AUTO_TRAIN_ON_STARTUP", "1").strip().lower() in {
     "1",
     "true",
     "yes",
 }
-AUTO_RETRAIN_INTERVAL_MIN = int(os.getenv("AUTO_RETRAIN_INTERVAL_MIN", "0"))
+# AUTO_RETRAIN_INTERVAL_MIN = int(os.getenv("AUTO_RETRAIN_INTERVAL_MIN", "0"))
 
 forecaster = WhaleMoveForecaster()
-retrain_task: Optional[asyncio.Task] = None
+# retrain_task: Optional[asyncio.Task] = None
 
 
 def ok(data):
     return {"status": "ok", "data": data}
 
+# async def _retrain_loop():
+#     interval_seconds = max(AUTO_RETRAIN_INTERVAL_MIN, 1) * 60
+#     while True:
+#         await asyncio.sleep(interval_seconds)
+#         try:
+#             logger.info("Auto retrain triggered")
+#             meta = await asyncio.to_thread(forecaster.train)
+#             logger.info("Auto retrain completed (samples=%s)", meta.get("samples"))
+#         except asyncio.CancelledError:
+#             raise
+#         except Exception as exc:
+#             logger.warning("Auto retrain failed: %s", exc)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # global retrain_task
+    try:
+        forecaster.connect()
+    except Exception as exc:
+        logger.warning("ClickHouse connect failed on startup: %s", exc)
+    loaded = forecaster.load_bundle()
+    if loaded:
+        logger.info("Loaded existing model bundle (source=%s)", forecaster.model_info().get("model_source"))
+
+    if AUTO_TRAIN_ON_STARTUP and not forecaster.is_ready():
+        try:
+            meta = await asyncio.to_thread(forecaster.train)
+            logger.info("Initial training complete (samples=%s)", meta.get("samples"))
+        except Exception as exc:
+            logger.warning("Initial training failed: %s", exc)
+
+    # if AUTO_RETRAIN_INTERVAL_MIN > 0:
+    #     retrain_task = asyncio.create_task(_retrain_loop())
+    #     logger.warning(
+    #         "Emergency auto retrain is enabled in service (interval=%d minutes). "
+    #         "Recommended production mode is Airflow-driven retrain with AUTO_RETRAIN_INTERVAL_MIN=0.",
+    #         AUTO_RETRAIN_INTERVAL_MIN,
+    #     )
+
+    yield
+
+    # if retrain_task:
+    #     retrain_task.cancel()
+    #     try:
+    #         await retrain_task
+    #     except asyncio.CancelledError:
+    #         pass
+    forecaster.close()
+
+
+app = FastAPI(
+    title="Whale Move Forecast Service",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 class TrainRequest(BaseModel):
     lookback_days: Optional[int] = Field(default=None, ge=30, le=720)
     max_rows: Optional[int] = Field(default=None, ge=2000, le=800000)
     horizon: Optional[int] = Field(default=None, ge=2, le=20)
+    
+
+class TrainSymbolRequest(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=20)
+    lookback_days: Optional[int] = Field(default=None, ge=30, le=720)
+    max_rows: Optional[int] = Field(default=None, ge=500, le=200000)
+    horizon: Optional[int] = Field(default=None, ge=2, le=20)
+    force_promote: bool = False
 
 
 class ForecastEvent(BaseModel):
@@ -56,65 +119,10 @@ class ForecastEvent(BaseModel):
 class BatchPredictRequest(BaseModel):
     events: List[ForecastEvent] = Field(default_factory=list)
 
-
-async def _retrain_loop():
-    interval_seconds = max(AUTO_RETRAIN_INTERVAL_MIN, 1) * 60
-    while True:
-        await asyncio.sleep(interval_seconds)
-        try:
-            logger.info("Auto retrain triggered")
-            meta = await asyncio.to_thread(forecaster.train)
-            logger.info("Auto retrain completed (samples=%s)", meta.get("samples"))
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            logger.warning("Auto retrain failed: %s", exc)
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    global retrain_task
-    forecaster.connect()
-    loaded = forecaster.load_bundle()
-    if loaded:
-        logger.info("Loaded existing model bundle (source=%s)", forecaster.model_info().get("model_source"))
-
-    if AUTO_TRAIN_ON_STARTUP and not forecaster.is_ready():
-        try:
-            meta = await asyncio.to_thread(forecaster.train)
-            logger.info("Initial training complete (samples=%s)", meta.get("samples"))
-        except Exception as exc:
-            logger.warning("Initial training failed: %s", exc)
-
-    if AUTO_RETRAIN_INTERVAL_MIN > 0:
-        retrain_task = asyncio.create_task(_retrain_loop())
-        logger.warning(
-            "Emergency auto retrain is enabled in service (interval=%d minutes). "
-            "Recommended production mode is Airflow-driven retrain with AUTO_RETRAIN_INTERVAL_MIN=0.",
-            AUTO_RETRAIN_INTERVAL_MIN,
-        )
-
-    yield
-
-    if retrain_task:
-        retrain_task.cancel()
-        try:
-            await retrain_task
-        except asyncio.CancelledError:
-            pass
-    forecaster.close()
-
-
-app = FastAPI(
-    title="Whale Move Forecast Service",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-
 @app.get("/health")
 async def health():
     info = forecaster.model_info()
+    symbol_models = info.get("symbol_models") or {}
     return ok(
         {
             "service": "whale-ml",
@@ -126,6 +134,7 @@ async def health():
             "mlflow_run_id": info.get("mlflow_run_id"),
             "trained_at": info.get("trained_at"),
             "samples": info.get("samples"),
+            "symbol_model_count": symbol_models.get("count", 0),
         }
     )
 
@@ -133,6 +142,11 @@ async def health():
 @app.get("/model/info")
 async def model_info():
     return ok(forecaster.model_info())
+
+
+@app.get("/model/symbols")
+async def model_symbols():
+    return ok(forecaster.list_symbol_models())
 
 
 @app.post("/train")
@@ -147,6 +161,23 @@ async def train_model(payload: TrainRequest):
         return ok(meta)
     except Exception as exc:
         logger.error("Train failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/train-symbol")
+async def train_symbol_model(payload: TrainSymbolRequest):
+    try:
+        meta = await asyncio.to_thread(
+            forecaster.train_symbol,
+            payload.symbol,
+            payload.lookback_days,
+            payload.max_rows,
+            payload.horizon,
+            payload.force_promote,
+        )
+        return ok(meta)
+    except Exception as exc:
+        logger.error("Train symbol failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 

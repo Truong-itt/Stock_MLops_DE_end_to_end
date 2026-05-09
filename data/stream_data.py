@@ -16,7 +16,7 @@ import os
 import signal
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import yfinance as yf
 
@@ -114,6 +114,47 @@ def resolve_topic_and_partition(stock_id: str, registry: SymbolRegistry):
     return topic, partition
 
 
+def build_symbol_maps(registry: SymbolRegistry) -> Dict[str, Dict[str, str]]:
+    """Build provider<->internal symbol maps.
+
+    Yahoo requires VN equities with `.VN` suffix (e.g. FPT.VN), while
+    internal routing keeps bare symbols (e.g. FPT).
+    """
+    data = registry.load()
+    provider_to_internal: Dict[str, str] = {}
+    internal_to_provider: Dict[str, str] = {}
+
+    for market, meta in (data.get("markets") or {}).items():
+        for raw_symbol in meta.get("symbols") or []:
+            internal = str(raw_symbol).strip().upper()
+            if not internal:
+                continue
+            if market == "vn" and "." not in internal:
+                provider = f"{internal}.VN"
+            else:
+                provider = internal
+            internal_to_provider[internal] = provider
+            provider_to_internal[provider] = internal
+
+    return {
+        "provider_to_internal": provider_to_internal,
+        "internal_to_provider": internal_to_provider,
+    }
+
+
+def ordered_provider_symbols(internal_to_provider: Dict[str, str], ordered_internal: List[str]) -> List[str]:
+    """Return de-duplicated provider symbols preserving registry order."""
+    seen: Set[str] = set()
+    out: List[str] = []
+    for internal in ordered_internal:
+        provider = internal_to_provider.get(internal)
+        if not provider or provider in seen:
+            continue
+        seen.add(provider)
+        out.append(provider)
+    return out
+
+
 # KAFKA PRODUCER
 def create_producer(bootstrap: str, schema_registry_url: str) -> SerializingProducer:
     sr = SchemaRegistryClient({"url": schema_registry_url})
@@ -134,6 +175,9 @@ async def run(bootstrap: str, schema_registry_url: str):
     logger.info("Initializing Kafka Avro producer ...")
     producer = create_producer(bootstrap, schema_registry_url)
     registry = SymbolRegistry()
+    symbol_maps = build_symbol_maps(registry)
+    provider_to_internal = symbol_maps["provider_to_internal"]
+    internal_to_provider = symbol_maps["internal_to_provider"]
 
     sent = 0
     skipped = 0
@@ -170,12 +214,41 @@ async def run(bootstrap: str, schema_registry_url: str):
             logger.debug("Record conversion returned None, skipped")
             return
 
-        stock_id = record["id"]
-        topic, partition = resolve_topic_and_partition(stock_id, registry)
+        provider_symbol = str(record["id"]).strip().upper()
+        stock_id = provider_to_internal.get(provider_symbol)
+        if stock_id is None:
+            skipped += 1
+            logger.debug("Unknown provider symbol=%s, skipped", provider_symbol)
+            return
+
+        market, topic, partition = registry.get_symbol_location(stock_id)
         if topic is None:
             skipped += 1
-            logger.debug("Unknown stock_id=%s, skipped", stock_id)
+            logger.debug("Unknown stock_id=%s (provider=%s), skipped", stock_id, provider_symbol)
             return
+
+        if market == "vn":
+            # Defensive gate: only accept VN feed ids and VN exchange payloads.
+            if not provider_symbol.endswith(".VN"):
+                skipped += 1
+                logger.debug(
+                    "Filtered non-VN provider symbol=%s for vn stock_id=%s",
+                    provider_symbol,
+                    stock_id,
+                )
+                return
+            record_exchange = str(record.get("exchange") or "").strip().upper()
+            if record_exchange != "VSE":
+                skipped += 1
+                logger.debug(
+                    "Filtered vn stock_id=%s with provider=%s exchange=%s",
+                    stock_id,
+                    provider_symbol,
+                    record_exchange,
+                )
+                return
+
+        record["id"] = stock_id
 
         producer.produce(
             topic=topic,
@@ -202,16 +275,22 @@ async def run(bootstrap: str, schema_registry_url: str):
         loop.add_signal_handler(sig, _signal_handler)
 
     async def sync_subscriptions(ws, subscribed_symbols: Set[str]):
+        nonlocal provider_to_internal, internal_to_provider
         while not stop_event.is_set():
             try:
                 registry.reload_if_changed()
-                all_symbols = registry.get_all_symbols()
-                new_symbols = [sym for sym in all_symbols if sym not in subscribed_symbols]
+                symbol_maps = build_symbol_maps(registry)
+                provider_to_internal = symbol_maps["provider_to_internal"]
+                internal_to_provider = symbol_maps["internal_to_provider"]
+
+                all_internal_symbols = registry.get_all_symbols()
+                all_provider_symbols = ordered_provider_symbols(internal_to_provider, all_internal_symbols)
+                new_symbols = [sym for sym in all_provider_symbols if sym not in subscribed_symbols]
                 if new_symbols:
                     await ws.subscribe(new_symbols)
                     subscribed_symbols.update(new_symbols)
                     logger.info(
-                        "Subscribed %d new symbols from registry (total=%d)",
+                        "Subscribed %d new provider symbols from registry (total=%d)",
                         len(new_symbols),
                         len(subscribed_symbols),
                     )
@@ -236,7 +315,11 @@ async def run(bootstrap: str, schema_registry_url: str):
     try:
         while not stop_event.is_set():
             registry.reload_if_changed()
-            initial_symbols = registry.get_all_symbols()
+            symbol_maps = build_symbol_maps(registry)
+            provider_to_internal = symbol_maps["provider_to_internal"]
+            internal_to_provider = symbol_maps["internal_to_provider"]
+            all_internal_symbols = registry.get_all_symbols()
+            initial_symbols = ordered_provider_symbols(internal_to_provider, all_internal_symbols)
             if not initial_symbols:
                 logger.warning("Registry is empty, waiting before retrying Yahoo connection")
                 await asyncio.sleep(WS_RECONNECT_BASE_DELAY_SEC)
@@ -257,7 +340,7 @@ async def run(bootstrap: str, schema_registry_url: str):
                 "Connecting to Yahoo Finance WebSocket (attempt=%d)",
                 reconnect_attempts + 1,
             )
-            logger.info("Subscribing to %d symbols from registry", len(initial_symbols))
+            logger.info("Subscribing to %d provider symbols from registry", len(initial_symbols))
 
             try:
                 # Always create a fresh AsyncWebSocket instance when reconnecting.

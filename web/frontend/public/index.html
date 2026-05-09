@@ -10,14 +10,17 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="/css/style.css?v=20260413g" />
+  <link rel="stylesheet" href="/css/style.css?v=20260422a" />
   <script>
     /* ── Theme: runs before paint to avoid FOUC ── */
     (function(){
       try {
         var saved = localStorage.getItem('theme');
-        if(saved) document.documentElement.setAttribute('data-theme', saved);
-      } catch(e){}
+        var next = (saved === 'dark' || saved === 'light') ? saved : 'light';
+        document.documentElement.setAttribute('data-theme', next);
+      } catch(e){
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
     })();
     function toggleTheme(){
       var html = document.documentElement;
@@ -68,7 +71,7 @@
       <span class="dot"></span>
       <span class="label">Đang kết nối</span>
     </div>
-    <button class="sync-btn" id="syncBtn" type="button" title="Đồng bộ lại dữ liệu">Dong bo lai</button>
+    <button class="sync-btn" id="syncBtn" type="button" title="Đồng bộ lại dữ liệu">Reconnect</button>
     <div class="clock" id="clock">--:--:--</div>
   </div>
 </header>
@@ -330,15 +333,20 @@
         <button type="button" class="chart-mode-btn" data-mode="candlestick">Nến</button>
       </div>
       <select id="dockInterval">
-        <option value="1m" selected>1 phút</option>
-        <option value="5m">5 phút</option>
-        <option value="1h">1 giờ</option>
-        <option value="3h">3 giờ</option>
-        <option value="6h">6 giờ</option>
-        <option value="15d">15 ngày</option>
+        <option value="1d" selected>1 ngày</option>
+        <option value="1w">1 tuần</option>
         <option value="1mo">1 tháng</option>
-        <option value="6mo">6 tháng</option>
+        <option value="3mo">3 tháng</option>
         <option value="1y">1 năm</option>
+        <option value="5y">5 năm</option>
+      </select>
+      <select id="dockCandleInterval" class="candle-cycle-select hidden" aria-label="Chu ky nen">
+        <option value="15m" selected>15 phút</option>
+        <option value="1h">1 giờ</option>
+        <option value="4h">4 giờ</option>
+        <option value="1d">1 ngày</option>
+        <option value="1w">1 tuần</option>
+        <option value="1mo">1 tháng</option>
       </select>
     </div>
   </div>
@@ -376,15 +384,20 @@
             <button type="button" class="chart-mode-btn" data-mode="candlestick">Nến</button>
           </div>
           <select id="drInterval">
-            <option value="1m" selected>1 phút</option>
-            <option value="5m">5 phút</option>
-            <option value="1h">1 giờ</option>
-            <option value="3h">3 giờ</option>
-            <option value="6h">6 giờ</option>
-            <option value="15d">15 ngày</option>
+            <option value="1d" selected>1 ngày</option>
+            <option value="1w">1 tuần</option>
             <option value="1mo">1 tháng</option>
-            <option value="6mo">6 tháng</option>
+            <option value="3mo">3 tháng</option>
             <option value="1y">1 năm</option>
+            <option value="5y">5 năm</option>
+          </select>
+          <select id="drCandleInterval" class="candle-cycle-select hidden" aria-label="Chu ky nen">
+            <option value="15m" selected>15 phút</option>
+            <option value="1h">1 giờ</option>
+            <option value="4h">4 giờ</option>
+            <option value="1d">1 ngày</option>
+            <option value="1w">1 tuần</option>
+            <option value="1mo">1 tháng</option>
           </select>
         </div>
       </div>
@@ -405,20 +418,60 @@
         <canvas id="drCpChart"></canvas>
       </div>
     </div>
+
+    <!-- Market Orderbook -->
+    <div class="market-orderbook-section" id="mobSection">
+      <div class="mob-header">
+        <h3>Sổ lệnh thị trường</h3>
+        <div class="mob-lot-toggle" role="group" aria-label="Che do lo">
+          <button type="button" class="mob-lot-btn active" id="mobRoundBtn" data-lot="round">Lô chẵn</button>
+          <button type="button" class="mob-lot-btn" id="mobOddBtn" data-lot="odd">Lô lẻ</button>
+        </div>
+      </div>
+      <div class="mob-subtitle">Lệnh đang chờ khớp</div>
+      <div class="mob-depth-table">
+        <div class="mob-depth-head">
+          <span>Khối lượng</span>
+          <span>Giá mua</span>
+          <span>Giá bán</span>
+          <span>Khối lượng</span>
+        </div>
+        <div class="mob-depth-body" id="mobDepthBody">
+          <div class="mob-depth-item">
+            <span>--</span><span>--</span><span>--</span><span>--</span>
+          </div>
+          <div class="mob-depth-item">
+            <span>--</span><span>--</span><span>--</span><span>--</span>
+          </div>
+          <div class="mob-depth-item">
+            <span>--</span><span>--</span><span>--</span><span>--</span>
+          </div>
+        </div>
+      </div>
+      <div class="mob-force-row">
+        <span class="mob-force-buy" id="mobBuyForceLbl">Lực mua --%</span>
+        <span class="mob-force-sell" id="mobSellForceLbl">Lực bán --%</span>
+      </div>
+      <div class="mob-force-bar" aria-hidden="true">
+        <span class="mob-force-buy-fill" id="mobBuyForceBar" style="width:50%"></span>
+        <span class="mob-force-sell-fill" id="mobSellForceBar" style="width:50%"></span>
+      </div>
+    </div>
+
     <!-- Matched Orders -->
     <div class="matched-orders-section">
       <div class="mo-header">
-        <h3>Matched Orders</h3>
-        <!-- <span class="mo-subtitle">Update realtime</span> -->
+        <h3>Lệnh khớp gần nhất</h3>
+        <span class="mo-meta" id="moMeta">--</span>
       </div>
       <div class="mo-table-wrap">
         <table class="mo-table" id="moTable">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Price</th>
-              <th>Last Size</th>
-              <th>Change</th>
+              <th>Thời gian</th>
+              <th>Khớp lệnh</th>
+              <th>Khối lượng</th>
+              <th>Giá</th>
             </tr>
           </thead>
           <tbody id="moBody">
@@ -426,9 +479,30 @@
           </tbody>
         </table>
       </div>
-      <div class="mo-total" id="moTotal">
-        <span class="mo-total-label">Total Orders</span>
-        <span class="mo-total-val" id="moTotalVal">--</span>
+      <div class="mo-summary" id="moTotal">
+        <div class="mo-kpi-grid">
+          <div class="mo-kpi buy">
+            <span class="mo-kpi-label">Khớp lệnh mua</span>
+            <span class="mo-kpi-value" id="moBuyVal">--</span>
+          </div>
+          <div class="mo-kpi total">
+            <span class="mo-kpi-label">Tổng khớp lệnh</span>
+            <span class="mo-kpi-value" id="moTotalVal">--</span>
+          </div>
+          <div class="mo-kpi sell">
+            <span class="mo-kpi-label">Khớp lệnh bán</span>
+            <span class="mo-kpi-value" id="moSellVal">--</span>
+          </div>
+        </div>
+        <div class="mo-ratio-row">
+          <span class="mo-ratio-buy" id="moBuyPct">--%</span>
+          <span class="mo-ratio-sell" id="moSellPct">--%</span>
+        </div>
+        <div class="mo-ratio-bar" aria-hidden="true">
+          <span class="mo-ratio-buy-fill" id="moBuyBar" style="width:50%"></span>
+          <span class="mo-ratio-sell-fill" id="moSellBar" style="width:50%"></span>
+        </div>
+        <!-- <div class="mo-hint">Mua/Bán được ước lượng theo hướng biến động giá tick gần nhất.</div> -->
       </div>
     </div>
 
@@ -522,6 +596,6 @@
 <!-- ═══ SCRIPTS ══════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script src="/js/app.js?v=20260413g"></script>
+  <script src="/js/app.js?v=20260423rt4"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@ services:
   backend:
     container_name: backend-stock
     build: ./backend
-    env_file: .env.be
+    env_file: .env
     ports:
       - "8020:8010"
     restart: always
