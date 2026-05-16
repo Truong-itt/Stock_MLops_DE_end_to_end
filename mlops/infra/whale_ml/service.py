@@ -87,17 +87,59 @@ app = FastAPI(
 )
 
 class TrainRequest(BaseModel):
-    lookback_days: Optional[int] = Field(default=None, ge=30, le=720)
+    lookback_days: Optional[int] = Field(default=None, ge=5, le=720)
     max_rows: Optional[int] = Field(default=None, ge=2000, le=800000)
     horizon: Optional[int] = Field(default=None, ge=2, le=20)
+    direction_return_threshold: Optional[float] = Field(default=None, ge=0.0, le=0.2)
+    direction_neutral_policy: Optional[str] = Field(default=None, pattern="^(drop|sign)$")
+    direction_label_target: Optional[str] = Field(default=None, pattern="^(next_close|horizon_extreme)$")
+    min_cp_prob: Optional[float] = Field(default=None, ge=0.0)
+    min_whale_score: Optional[float] = Field(default=None, ge=0.0)
+    min_innovation_abs: Optional[float] = Field(default=None, ge=0.0)
     
 
 class TrainSymbolRequest(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=20)
-    lookback_days: Optional[int] = Field(default=None, ge=30, le=720)
+    lookback_days: Optional[int] = Field(default=None, ge=5, le=720)
     max_rows: Optional[int] = Field(default=None, ge=500, le=200000)
     horizon: Optional[int] = Field(default=None, ge=2, le=20)
     force_promote: bool = False
+    direction_return_threshold: Optional[float] = Field(default=None, ge=0.0, le=0.2)
+    direction_neutral_policy: Optional[str] = Field(default=None, pattern="^(drop|sign)$")
+    direction_label_target: Optional[str] = Field(default=None, pattern="^(next_close|horizon_extreme)$")
+    min_cp_prob: Optional[float] = Field(default=None, ge=0.0)
+    min_whale_score: Optional[float] = Field(default=None, ge=0.0)
+    min_innovation_abs: Optional[float] = Field(default=None, ge=0.0)
+
+
+class BacktestRequest(BaseModel):
+    lookback_days: Optional[int] = Field(default=None, ge=5, le=720)
+    max_rows: Optional[int] = Field(default=None, ge=2000, le=800000)
+    horizon: Optional[int] = Field(default=None, ge=2, le=20)
+    holdout_days: int = Field(default=10, ge=1, le=120)
+    direction_return_threshold: Optional[float] = Field(default=None, ge=0.0, le=0.2)
+    direction_neutral_policy: Optional[str] = Field(default=None, pattern="^(drop|sign)$")
+    direction_label_target: Optional[str] = Field(default=None, pattern="^(next_close|horizon_extreme)$")
+    min_cp_prob: Optional[float] = Field(default=None, ge=0.0)
+    min_whale_score: Optional[float] = Field(default=None, ge=0.0)
+    min_innovation_abs: Optional[float] = Field(default=None, ge=0.0)
+
+
+class RollingBacktestRequest(BacktestRequest):
+    holdout_days: int = Field(default=5, ge=1, le=30)
+    min_train_days: int = Field(default=3, ge=1, le=240)
+    min_train_samples: Optional[int] = Field(default=None, ge=100, le=800000)
+    train_window_days: Optional[int] = Field(default=None, ge=1, le=720)
+    max_events_per_symbol_day: Optional[int] = Field(default=None, ge=1, le=200)
+    event_selection_strategy: Optional[str] = Field(
+        default=None,
+        pattern="^(latest|cp_prob|whale_score|innovation_abs|strongest)$",
+    )
+
+
+class RollingBacktestScanRequest(RollingBacktestRequest):
+    direction_return_thresholds: List[float] = Field(default_factory=lambda: [0.005, 0.008, 0.01, 0.012, 0.015, 0.02])
+    max_events_per_symbol_day_options: List[int] = Field(default_factory=lambda: [1, 2, 3])
 
 
 class ForecastEvent(BaseModel):
@@ -118,6 +160,35 @@ class ForecastEvent(BaseModel):
 
 class BatchPredictRequest(BaseModel):
     events: List[ForecastEvent] = Field(default_factory=list)
+
+
+class TradeFilterCalibrateRequest(BaseModel):
+    lookback_days: Optional[int] = Field(default=10, ge=5, le=720)
+    max_rows: Optional[int] = Field(default=40000, ge=2000, le=800000)
+    horizon: Optional[int] = Field(default=5, ge=2, le=20)
+    holdout_days: int = Field(default=5, ge=1, le=30)
+    min_train_days: int = Field(default=3, ge=1, le=240)
+    min_train_samples: Optional[int] = Field(default=300, ge=100, le=800000)
+    train_window_days: Optional[int] = Field(default=None, ge=1, le=720)
+    max_events_per_symbol_day: Optional[int] = Field(default=1, ge=1, le=200)
+    event_selection_strategy: Optional[str] = Field(
+        default="strongest",
+        pattern="^(latest|cp_prob|whale_score|innovation_abs|strongest)$",
+    )
+    direction_return_threshold: Optional[float] = Field(default=0.02, ge=0.0, le=0.2)
+    direction_neutral_policy: Optional[str] = Field(default="drop", pattern="^(drop|sign)$")
+    direction_label_target: Optional[str] = Field(default="horizon_extreme", pattern="^(next_close|horizon_extreme)$")
+    min_cp_prob: Optional[float] = Field(default=0.0, ge=0.0)
+    min_whale_score: Optional[float] = Field(default=0.0, ge=0.0)
+    min_innovation_abs: Optional[float] = Field(default=0.0, ge=0.0)
+    fallback_min_prob_up: float = Field(default=0.88, ge=0.0, le=1.0)
+    enable_filter: bool = True
+
+
+class TradeFilterUpdateRequest(BaseModel):
+    enabled: Optional[bool] = None
+    min_prob_up: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
 
 @app.get("/health")
 async def health():
@@ -149,6 +220,57 @@ async def model_symbols():
     return ok(forecaster.list_symbol_models())
 
 
+@app.get("/trade-filter")
+async def trade_filter_info():
+    return ok(forecaster.get_trade_filter_config())
+
+
+@app.post("/trade-filter")
+async def trade_filter_update(payload: TradeFilterUpdateRequest):
+    if payload.enabled is None and payload.min_prob_up is None:
+        raise HTTPException(status_code=400, detail="At least one field required: enabled or min_prob_up")
+    try:
+        result = await asyncio.to_thread(
+            forecaster.update_trade_filter_config,
+            min_prob_up=payload.min_prob_up,
+            enabled=payload.enabled,
+            source="manual_api",
+        )
+        return ok(result)
+    except Exception as exc:
+        logger.error("Trade filter update failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/trade-filter/calibrate")
+async def trade_filter_calibrate(payload: TradeFilterCalibrateRequest):
+    try:
+        result = await asyncio.to_thread(
+            forecaster.calibrate_trade_filter,
+            payload.lookback_days,
+            payload.max_rows,
+            payload.horizon,
+            payload.holdout_days,
+            payload.min_train_days,
+            payload.min_train_samples,
+            payload.train_window_days,
+            payload.max_events_per_symbol_day,
+            payload.event_selection_strategy,
+            payload.direction_return_threshold,
+            payload.direction_neutral_policy,
+            payload.direction_label_target,
+            payload.min_cp_prob,
+            payload.min_whale_score,
+            payload.min_innovation_abs,
+            payload.fallback_min_prob_up,
+            payload.enable_filter,
+        )
+        return ok(result)
+    except Exception as exc:
+        logger.error("Trade filter calibration failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/train")
 async def train_model(payload: TrainRequest):
     try:
@@ -157,10 +279,37 @@ async def train_model(payload: TrainRequest):
             payload.lookback_days,
             payload.max_rows,
             payload.horizon,
+            payload.direction_return_threshold,
+            payload.direction_neutral_policy,
+            payload.direction_label_target,
+            payload.min_cp_prob,
+            payload.min_whale_score,
+            payload.min_innovation_abs,
         )
         return ok(meta)
     except Exception as exc:
         logger.error("Train failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/train-experiment")
+async def train_experiment(payload: TrainRequest):
+    try:
+        meta = await asyncio.to_thread(
+            forecaster.train_experiment,
+            payload.lookback_days,
+            payload.max_rows,
+            payload.horizon,
+            payload.direction_return_threshold,
+            payload.direction_neutral_policy,
+            payload.direction_label_target,
+            payload.min_cp_prob,
+            payload.min_whale_score,
+            payload.min_innovation_abs,
+        )
+        return ok(meta)
+    except Exception as exc:
+        logger.error("Train experiment failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
@@ -174,10 +323,93 @@ async def train_symbol_model(payload: TrainSymbolRequest):
             payload.max_rows,
             payload.horizon,
             payload.force_promote,
+            payload.direction_return_threshold,
+            payload.direction_neutral_policy,
+            payload.direction_label_target,
+            payload.min_cp_prob,
+            payload.min_whale_score,
+            payload.min_innovation_abs,
         )
         return ok(meta)
     except Exception as exc:
         logger.error("Train symbol failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/backtest")
+async def backtest_model(payload: BacktestRequest):
+    try:
+        result = await asyncio.to_thread(
+            forecaster.backtest_current_model,
+            payload.lookback_days,
+            payload.max_rows,
+            payload.horizon,
+            payload.holdout_days,
+            payload.direction_return_threshold,
+            payload.direction_neutral_policy,
+            payload.direction_label_target,
+            payload.min_cp_prob,
+            payload.min_whale_score,
+            payload.min_innovation_abs,
+        )
+        return ok(result)
+    except Exception as exc:
+        logger.error("Backtest failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/rolling-backtest")
+async def rolling_backtest(payload: RollingBacktestRequest):
+    try:
+        result = await asyncio.to_thread(
+            forecaster.rolling_backtest,
+            payload.lookback_days,
+            payload.max_rows,
+            payload.horizon,
+            payload.holdout_days,
+            payload.min_train_days,
+            payload.min_train_samples,
+            payload.train_window_days,
+            payload.max_events_per_symbol_day,
+            payload.event_selection_strategy,
+            payload.direction_return_threshold,
+            payload.direction_neutral_policy,
+            payload.direction_label_target,
+            payload.min_cp_prob,
+            payload.min_whale_score,
+            payload.min_innovation_abs,
+        )
+        return ok(result)
+    except Exception as exc:
+        logger.error("Rolling backtest failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/rolling-backtest-scan")
+async def rolling_backtest_scan(payload: RollingBacktestScanRequest):
+    try:
+        result = await asyncio.to_thread(
+            forecaster.rolling_backtest_scan,
+            payload.lookback_days,
+            payload.max_rows,
+            payload.horizon,
+            payload.holdout_days,
+            payload.min_train_days,
+            payload.min_train_samples,
+            payload.train_window_days,
+            payload.max_events_per_symbol_day,
+            payload.event_selection_strategy,
+            payload.direction_return_thresholds,
+            payload.max_events_per_symbol_day_options,
+            payload.direction_neutral_policy,
+            payload.direction_label_target,
+            payload.min_cp_prob,
+            payload.min_whale_score,
+            payload.min_innovation_abs,
+        )
+        return ok(result)
+    except Exception as exc:
+        logger.error("Rolling backtest scan failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
