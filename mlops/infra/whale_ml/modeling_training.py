@@ -1677,6 +1677,66 @@ class TrainingMixin:
 
         return slices
 
+    @staticmethod
+    def _trade_rule_long_metrics(
+        y_dir_true: np.ndarray,
+        prob_up: np.ndarray,
+        outcomes: Optional[Dict[str, np.ndarray]],
+        *,
+        min_prob_up: float,
+        direction_return_threshold: float = 0.0,
+    ) -> Dict[str, Any]:
+        required = ("horizon_close_return", "future_max_return")
+        if not outcomes or any(key not in outcomes for key in required):
+            return {}
+
+        y_dir_true = np.asarray(y_dir_true, dtype=np.int64)
+        prob_values = np.asarray(prob_up, dtype=np.float64)
+        close_ret = np.asarray(outcomes["horizon_close_return"], dtype=np.float64)
+        max_ret = np.asarray(outcomes["future_max_return"], dtype=np.float64)
+        if not (len(y_dir_true) == len(prob_values) == len(close_ret) == len(max_ret)):
+            return {}
+
+        finite_mask = np.isfinite(prob_values) & np.isfinite(close_ret) & np.isfinite(max_ret)
+        if not np.any(finite_mask):
+            return {}
+
+        total_valid = int(np.sum(finite_mask))
+        threshold = min(1.0, max(0.0, float(min_prob_up)))
+        selected_mask = finite_mask & (prob_values >= threshold)
+        selected_count = int(np.sum(selected_mask))
+        if selected_count <= 0:
+            return {
+                "min_prob_up": threshold,
+                "samples": 0,
+                "coverage": 0.0,
+                "precision_direction": None,
+                "paper_win_rate": None,
+                "paper_return_mean": None,
+                "paper_return_sum": None,
+                "threshold_hit_rate": None,
+                "path_best_return_mean": None,
+            }
+
+        actual = y_dir_true[selected_mask]
+        direction_correct = actual == 1
+        directional_return = close_ret[selected_mask]
+        path_best_return = max_ret[selected_mask]
+        target_move = max(0.0, float(direction_return_threshold or 0.0))
+        threshold_hit = path_best_return >= target_move
+
+        return {
+            "min_prob_up": threshold,
+            "samples": selected_count,
+            "coverage": float(selected_count / max(total_valid, 1)),
+            "precision_direction": _safe_metric_value(np.mean(direction_correct)),
+            "paper_win_rate": _safe_metric_value(np.mean(directional_return > 0.0)),
+            "paper_return_mean": _safe_metric_value(np.mean(directional_return)),
+            "paper_return_sum": _safe_metric_value(np.sum(directional_return)),
+            "threshold_hit_rate": _safe_metric_value(np.mean(threshold_hit)),
+            "path_best_return_mean": _safe_metric_value(np.mean(path_best_return)),
+        }
+
     def _confidence_slice_metrics(
         self,
         y_dir_true: np.ndarray,
@@ -1827,6 +1887,7 @@ class TrainingMixin:
         min_cp_prob: Optional[float] = None,
         min_whale_score: Optional[float] = None,
         min_innovation_abs: Optional[float] = None,
+        trade_rule_min_prob_up: Optional[float] = None,
     ) -> Dict[str, Any]:
         with self.train_lock:
             lookback = int(lookback_days or self.train_lookback_days)
@@ -2026,6 +2087,15 @@ class TrainingMixin:
                 np.concatenate(all_y_dir_true),
                 np.concatenate(all_y_sess_true),
             )
+            overall_trade_rule = None
+            if trade_rule_min_prob_up is not None:
+                overall_trade_rule = self._trade_rule_long_metrics(
+                    np.concatenate(all_y_dir_true),
+                    np.concatenate(all_prob_up),
+                    self._concat_outcomes(all_outcomes),
+                    min_prob_up=float(trade_rule_min_prob_up),
+                    direction_return_threshold=float(label_config["direction_return_threshold"]),
+                )
 
             def daily_mean(path: str) -> Optional[float]:
                 values: List[Optional[float]] = []
@@ -2068,6 +2138,7 @@ class TrainingMixin:
                     "scores": overall_eval["scores"],
                     "confidence_slices": overall_eval.get("confidence_slices", []),
                     "trade_slices": overall_eval.get("trade_slices", []),
+                    "trade_rule": overall_trade_rule,
                     "baseline": overall_baseline,
                 },
                 "daily_summary": {

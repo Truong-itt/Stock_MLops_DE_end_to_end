@@ -204,9 +204,11 @@ Tự chạy rolling-backtest và lấy ngưỡng `min_prob_up` từ bucket `top_
 ```bash
 curl -s -X POST http://localhost:8090/trade-filter/calibrate \
   -H 'Content-Type: application/json' \
-  -d '{"lookback_days":10,"max_rows":40000,"horizon":5,"holdout_days":5,"min_train_days":3,"min_train_samples":300,"max_events_per_symbol_day":1,"event_selection_strategy":"strongest","direction_return_threshold":0.02,"direction_neutral_policy":"drop","direction_label_target":"horizon_extreme","fallback_min_prob_up":0.88,"enable_filter":true}' \
+  -d '{"lookback_days":10,"max_rows":40000,"horizon":5,"holdout_days":5,"min_train_days":3,"min_train_samples":300,"max_events_per_symbol_day":1,"event_selection_strategy":"strongest","direction_return_threshold":0.02,"direction_neutral_policy":"drop","direction_label_target":"horizon_extreme","fallback_min_prob_up":0.88,"enable_filter":true,"min_top10_samples":30,"min_top10_precision":0.7,"min_top10_win_rate":0.55,"min_evaluated_days":3}' \
   | jq '.data'
 ```
+
+Guard sẽ chỉ chấp nhận ngưỡng mới khi đủ điều kiện (`samples`, `precision`, `win_rate`, `evaluated_days`). Nếu không đạt, hệ thống giữ ngưỡng an toàn hiện tại.
 
 ### `GET /trade-filter`
 

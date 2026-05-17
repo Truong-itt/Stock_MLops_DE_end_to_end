@@ -1,0 +1,91 @@
+{
+  "enabled": true,
+  "mode": "prob_up_long_top10",
+  "min_prob_up": 0.7,
+  "source": "manual_api",
+  "calibrated_at": "2026-05-17T04:11:03.221734+00:00",
+  "calibration": {
+    "method": "rolling_backtest.top_10pct_prob_up.min_prob_up",
+    "params": {
+      "lookback_days": 10,
+      "max_rows": 40000,
+      "horizon_sessions": 5,
+      "holdout_days": 5,
+      "min_train_days": 3,
+      "min_train_samples": 300,
+      "train_window_days": null,
+      "max_events_per_symbol_day": 1,
+      "event_selection_strategy": "strongest",
+      "confidence_coverages": [
+        0.1,
+        0.2,
+        0.3
+      ],
+      "trade_coverages": [
+        0.1,
+        0.2,
+        0.3
+      ],
+      "direction_return_threshold": 0.02,
+      "direction_neutral_policy": "drop",
+      "direction_label_target": "horizon_extreme",
+      "event_filters": {
+        "min_cp_prob": 0.0,
+        "min_whale_score": 0.0,
+        "min_innovation_abs": 0.0
+      }
+    },
+    "samples": 78,
+    "loaded_samples": 379,
+    "evaluated_date_count": 2,
+    "top10_prob_up": {
+      "bucket": "top_10pct_prob_up",
+      "ranking": "prob_up_long",
+      "target_coverage": 0.1,
+      "coverage": 0.10256410256410256,
+      "samples": 8,
+      "valid_probability_samples": 78,
+      "min_rank_score": 0.7122166531083048,
+      "mean_rank_score": 0.7949482049641167,
+      "min_confidence": 0.7122166531083048,
+      "mean_confidence": 0.7949482049641167,
+      "min_prob_up": 0.7122166531083048,
+      "mean_prob_up": 0.7949482049641167,
+      "precision_direction": 0.875,
+      "actual_up_ratio": 0.875,
+      "predicted_up_ratio": 1.0,
+      "paper_return_mean": 0.013872309789575751,
+      "paper_return_sum": 0.11097847831660601,
+      "paper_win_rate": 0.875,
+      "path_best_return_mean": 0.029341670802286376,
+      "threshold_hit_rate": 0.875,
+      "long_only_samples": 8,
+      "long_only_return_mean": 0.013872309789575751,
+      "long_only_win_rate": 0.875,
+      "down_side_samples": 0,
+      "down_side_return_mean": null,
+      "down_side_win_rate": null
+    },
+    "guard": {
+      "accepted": false,
+      "reason": "guard_rejected_keep_safe_threshold",
+      "checks": {
+        "has_candidate_threshold": true,
+        "min_top10_samples": false,
+        "min_top10_precision": true,
+        "min_top10_win_rate": true,
+        "min_evaluated_days": false
+      },
+      "inputs": {
+        "min_top10_samples": 30,
+        "min_top10_precision": 0.7,
+        "min_top10_win_rate": 0.55,
+        "min_evaluated_days": 3
+      }
+    },
+    "candidate_min_prob_up": 0.7122166531083048,
+    "selected_min_prob_up": 0.88,
+    "existing_min_prob_up": 0.88,
+    "fallback_min_prob_up": 0.88
+  }
+}

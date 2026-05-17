@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
@@ -9,7 +10,7 @@ import mlflow
 import pandas as pd
 from mlflow.tracking import MlflowClient
 
-from modeling_shared import _utc_now, logger
+from modeling_shared import _parse_event_time, _safe_float, _utc_now, logger
 
 class ModelInfraMixin:
     def _configure_mlflow(self):
@@ -67,6 +68,124 @@ class ModelInfraMixin:
             self.connect()
         result = self.client.query(sql)
         return pd.DataFrame(result.result_rows, columns=result.column_names)
+
+    def _qualified_clickhouse_table(self, table_name: str) -> str:
+        table = str(table_name or "").strip()
+        if "." in table:
+            return table
+        return f"{self.clickhouse_db}.{table}"
+
+    def _ensure_prediction_audit_table(self) -> None:
+        if not getattr(self, "prediction_audit_enabled", True):
+            return
+        if self.client is None:
+            self.connect()
+
+        table_name = self._qualified_clickhouse_table(
+            getattr(self, "prediction_audit_table", "whale_ml_prediction_audit")
+        )
+        self.client.command(
+            f"""
+            CREATE TABLE IF NOT EXISTS {table_name}
+            (
+                prediction_id       String,
+                event_key           String,
+                symbol              String,
+                event_time          DateTime64(3, 'UTC'),
+                predicted_at        DateTime64(3, 'UTC') DEFAULT now64(3),
+                model_scope         LowCardinality(String),
+                model_name          String,
+                model_version       String,
+                model_source        LowCardinality(String),
+                direction           LowCardinality(String),
+                prob_up             Float64,
+                prob_down           Float64,
+                direction_threshold Float64,
+                expected_sessions   Float64,
+                confidence          Float64,
+                feature_count       UInt16,
+                payload_json        String,
+                actual_checked_at   Nullable(DateTime64(3, 'UTC')),
+                actual_direction    Nullable(Int8),
+                actual_sessions     Nullable(Float64),
+                actual_return       Nullable(Float64)
+            )
+            ENGINE = ReplacingMergeTree(predicted_at)
+            PARTITION BY toYYYYMM(predicted_at)
+            ORDER BY (symbol, event_time, prediction_id)
+            TTL toDate(predicted_at) + INTERVAL 2 YEAR
+            SETTINGS index_granularity = 8192
+            """
+        )
+
+    def write_prediction_audit(self, predictions: list[Dict[str, Any]]) -> None:
+        if not getattr(self, "prediction_audit_enabled", True) or not predictions:
+            return
+        try:
+            self._ensure_prediction_audit_table()
+            predicted_at = _utc_now()
+            rows = []
+            for prediction in predictions:
+                event_time = _parse_event_time(prediction.get("event_time"))
+                payload_json = json.dumps(prediction, ensure_ascii=False, default=str)
+                rows.append(
+                    [
+                        uuid.uuid4().hex,
+                        str(prediction.get("event_key") or ""),
+                        str(prediction.get("symbol") or "").upper(),
+                        event_time,
+                        predicted_at,
+                        str(prediction.get("model_scope") or "global"),
+                        str(prediction.get("model_name") or self.registered_model_name),
+                        str(prediction.get("model_version") or ""),
+                        str(prediction.get("model_source") or self.model_source or "unknown"),
+                        str(prediction.get("direction") or ""),
+                        _safe_float(prediction.get("prob_up")),
+                        _safe_float(prediction.get("prob_down")),
+                        _safe_float(prediction.get("direction_threshold"), default=0.5),
+                        _safe_float(prediction.get("expected_sessions"), default=1.0),
+                        _safe_float(prediction.get("confidence")),
+                        int(prediction.get("feature_count") or 0),
+                        payload_json,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ]
+                )
+
+            table_name = self._qualified_clickhouse_table(
+                getattr(self, "prediction_audit_table", "whale_ml_prediction_audit")
+            )
+            self.client.insert(
+                table_name,
+                rows,
+                column_names=[
+                    "prediction_id",
+                    "event_key",
+                    "symbol",
+                    "event_time",
+                    "predicted_at",
+                    "model_scope",
+                    "model_name",
+                    "model_version",
+                    "model_source",
+                    "direction",
+                    "prob_up",
+                    "prob_down",
+                    "direction_threshold",
+                    "expected_sessions",
+                    "confidence",
+                    "feature_count",
+                    "payload_json",
+                    "actual_checked_at",
+                    "actual_direction",
+                    "actual_sessions",
+                    "actual_return",
+                ],
+            )
+        except Exception as exc:
+            logger.warning("Cannot write whale ML prediction audit rows: %s", exc)
 
     def _model_name_for_symbol(self, symbol: str) -> str:
         return self.symbol_model_name_template.format(base=self.registered_model_name, symbol=symbol)

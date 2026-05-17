@@ -1,0 +1,36 @@
+2026-05-11 13:17:27 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999910 via roc_auc), sessions model=extra_trees_regressor (score=-0.027063 via neg_mae)
+2026-05-11 13:17:32 @whale_ml.modeling [INFO]: Symbol challenger train finished for VJC (promoted=True, version=6)
+2026-05-11 13:25:54 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=1.000000 via roc_auc), sessions model=random_forest_regressor (score=-0.039996 via neg_mae)
+2026-05-11 13:25:56 @whale_ml.modeling [INFO]: Symbol challenger train finished for PNJ (promoted=True, version=6)
+2026-05-11 13:28:51 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999781 via roc_auc), sessions model=extra_trees_regressor (score=-0.054061 via neg_mae)
+2026-05-11 13:28:53 @whale_ml.modeling [INFO]: Symbol challenger train finished for LPB (promoted=True, version=3)
+2026-05-11 13:35:19 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999738 via roc_auc), sessions model=random_forest_regressor (score=-0.020001 via neg_mae)
+2026-05-11 13:35:22 @whale_ml.modeling [INFO]: Symbol challenger train finished for HCM (promoted=True, version=2)
+2026-05-11 13:46:24 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999803 via roc_auc), sessions model=extra_trees_regressor (score=-0.048964 via neg_mae)
+2026-05-11 13:46:26 @whale_ml.modeling [INFO]: Symbol challenger train finished for STB (promoted=True, version=6)
+2026-05-11 13:49:53 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999801 via roc_auc), sessions model=random_forest_regressor (score=-0.078871 via neg_mae)
+2026-05-11 13:49:56 @whale_ml.modeling [INFO]: Symbol challenger train finished for VSC (promoted=True, version=8)
+2026-05-11 13:50:39 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999490 via roc_auc), sessions model=random_forest_regressor (score=-0.030495 via neg_mae)
+2026-05-11 13:50:41 @whale_ml.modeling [INFO]: Symbol challenger train finished for DCM (promoted=True, version=1)
+2026-05-11 13:55:27 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (score=1.000000 via roc_auc), sessions model=extra_trees_regressor (score=-0.002621 via neg_mae)
+2026-05-11 13:55:30 @whale_ml.modeling [INFO]: Symbol challenger train finished for SAB (promoted=True, version=1)
+2026-05-11 14:08:34 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999604 via roc_auc), sessions model=random_forest_regressor (score=-0.054096 via neg_mae)
+2026-05-11 14:08:38 @whale_ml.modeling [INFO]: Symbol challenger train finished for VIB (promoted=True, version=1)
+2026-05-11 14:10:32 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.999955 via roc_auc), sessions model=extra_trees_regressor (score=-0.036916 via neg_mae)
+2026-05-11 14:10:35 @whale_ml.modeling [INFO]: Symbol challenger train finished for VCI (promoted=True, version=6)
+2026-05-11 14:17:51 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.998889 via roc_auc), sessions model=extra_trees_regressor (score=-0.063312 via neg_mae)
+2026-05-11 14:17:53 @whale_ml.modeling [INFO]: Symbol challenger train finished for BCM (promoted=True, version=1)
+2026-05-11 14:23:38 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=1.000000 via roc_auc), sessions model=random_forest_regressor (score=-0.000806 via neg_mae)
+2026-05-11 14:23:40 @whale_ml.modeling [INFO]: Symbol challenger train finished for POW (promoted=True, version=1)
+2026-05-11 14:29:38 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (score=0.997796 via roc_auc), sessions model=extra_trees_regressor (score=-0.080488 via neg_mae)
+2026-05-11 14:29:41 @whale_ml.modeling [INFO]: Symbol challenger train finished for GMD (promoted=True, version=2)
+2026-05-11 19:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-11 19:02:13 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-11 19:04:19 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-12 01:00:08 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-12 01:02:15 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-12 01:04:23 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-12 07:00:07 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-12 07:02:13 @whale_ml.service [ERROR]: Train failed: Training data too small (0 rows). Need at least 800 labeled samples.
+2026-05-12 07:06:02 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (score=0.999916 via roc_auc), sessions model=random_forest_regressor (score=-0.000000 via neg_mae)
+2026-05-12 13:01:04 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (score=0.999541 via roc_auc), sessions model=random_forest_regressor (score=-0.000000 via neg_mae)

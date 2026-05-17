@@ -135,6 +135,7 @@ class RollingBacktestRequest(BacktestRequest):
         default=None,
         pattern="^(latest|cp_prob|whale_score|innovation_abs|strongest)$",
     )
+    trade_rule_min_prob_up: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class RollingBacktestScanRequest(RollingBacktestRequest):
@@ -183,6 +184,10 @@ class TradeFilterCalibrateRequest(BaseModel):
     min_innovation_abs: Optional[float] = Field(default=0.0, ge=0.0)
     fallback_min_prob_up: float = Field(default=0.88, ge=0.0, le=1.0)
     enable_filter: bool = True
+    min_top10_samples: int = Field(default=30, ge=1, le=1000000)
+    min_top10_precision: float = Field(default=0.7, ge=0.0, le=1.0)
+    min_top10_win_rate: float = Field(default=0.55, ge=0.0, le=1.0)
+    min_evaluated_days: int = Field(default=3, ge=1, le=3650)
 
 
 class TradeFilterUpdateRequest(BaseModel):
@@ -264,6 +269,10 @@ async def trade_filter_calibrate(payload: TradeFilterCalibrateRequest):
             payload.min_innovation_abs,
             payload.fallback_min_prob_up,
             payload.enable_filter,
+            payload.min_top10_samples,
+            payload.min_top10_precision,
+            payload.min_top10_win_rate,
+            payload.min_evaluated_days,
         )
         return ok(result)
     except Exception as exc:
@@ -378,6 +387,7 @@ async def rolling_backtest(payload: RollingBacktestRequest):
             payload.min_cp_prob,
             payload.min_whale_score,
             payload.min_innovation_abs,
+            payload.trade_rule_min_prob_up,
         )
         return ok(result)
     except Exception as exc:

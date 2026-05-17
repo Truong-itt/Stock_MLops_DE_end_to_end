@@ -30,6 +30,14 @@ FEATURE_NAMES = [
     "dow_cos",
     "is_vn",
     "is_world",
+    "daily_return_1d",
+    "daily_return_3d",
+    "daily_return_5d",
+    "daily_volatility_5d",
+    "daily_range_pct",
+    "daily_close_position",
+    "daily_volume_zscore_5d",
+    "daily_change_percent",
 ]
 
 SYMBOL_TOKEN_PATTERN = re.compile(r"^[A-Z0-9_.-]{1,20}$")
@@ -117,12 +125,13 @@ class WhaleBundlePyfuncModel(mlflow.pyfunc.PythonModel):
 
     def predict(self, context, model_input):
         df = pd.DataFrame(model_input)
-        for name in FEATURE_NAMES:
+        feature_names = list(self.bundle.get("feature_names", FEATURE_NAMES))
+        for name in feature_names:
             if name not in df.columns:
                 df[name] = 0.0
 
         matrix = (
-            df[FEATURE_NAMES]
+            df[feature_names]
             .apply(pd.to_numeric, errors="coerce")
             .fillna(0.0)
             .to_numpy(dtype=np.float64)
@@ -132,6 +141,7 @@ class WhaleBundlePyfuncModel(mlflow.pyfunc.PythonModel):
         regressor = self.bundle["regressor"]
         meta = self.bundle.get("meta", {})
         horizon = int(meta.get("horizon_sessions", 5))
+        direction_threshold = float(meta.get("direction_threshold", 0.5) or 0.5)
 
         class_values = list(classifier.classes_)
         up_index = class_values.index(1) if 1 in class_values else (1 if len(class_values) > 1 else 0)
@@ -139,13 +149,14 @@ class WhaleBundlePyfuncModel(mlflow.pyfunc.PythonModel):
         prob_up = probs[:, up_index] if probs.shape[1] > up_index else probs[:, -1]
         prob_down = 1.0 - prob_up
         expected_sessions = np.clip(regressor.predict(matrix), 1.0, float(horizon))
-        direction = np.where(prob_up >= 0.5, "up", "down")
+        direction = np.where(prob_up >= direction_threshold, "up", "down")
 
         return pd.DataFrame(
             {
                 "direction": direction,
                 "prob_up": prob_up.astype(float),
                 "prob_down": prob_down.astype(float),
+                "direction_threshold": np.full(len(prob_up), direction_threshold, dtype=float),
                 "expected_sessions": expected_sessions.astype(float),
             }
         )

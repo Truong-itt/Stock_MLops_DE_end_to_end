@@ -355,3 +355,36 @@ FROM
 ANY INNER JOIN stock_warehouse.stock_changepoint_events AS events
     ON events.symbol = latest.symbol
    AND events.event_time = latest.event_time;
+
+-- ── 10. WHALE ML PREDICTION AUDIT ─────────────────────────────────
+-- Online predictions are stored here so they can be reconciled with
+-- realized direction/sessions after future trading days are available.
+CREATE TABLE IF NOT EXISTS stock_warehouse.whale_ml_prediction_audit
+(
+    prediction_id       String,
+    event_key           String,
+    symbol              String,
+    event_time          DateTime64(3, 'UTC'),
+    predicted_at        DateTime64(3, 'UTC') DEFAULT now64(3),
+    model_scope         LowCardinality(String),
+    model_name          String,
+    model_version       String,
+    model_source        LowCardinality(String),
+    direction           LowCardinality(String),
+    prob_up             Float64,
+    prob_down           Float64,
+    direction_threshold Float64,
+    expected_sessions   Float64,
+    confidence          Float64,
+    feature_count       UInt16,
+    payload_json        String,
+    actual_checked_at   Nullable(DateTime64(3, 'UTC')),
+    actual_direction    Nullable(Int8),
+    actual_sessions     Nullable(Float64),
+    actual_return       Nullable(Float64)
+)
+ENGINE = ReplacingMergeTree(predicted_at)
+PARTITION BY toYYYYMM(predicted_at)
+ORDER BY (symbol, event_time, prediction_id)
+TTL toDate(predicted_at) + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192;

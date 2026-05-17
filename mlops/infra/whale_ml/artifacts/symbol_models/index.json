@@ -1,25 +1,38 @@
 {
-  "updated_at": "2026-05-09T11:50:00.309363+00:00",
+  "updated_at": "2026-05-17T04:17:33.133469+00:00",
   "symbols": {
     "FPT": {
       "artifact_path": "/app/artifacts/symbol_models/FPT.joblib",
-      "trained_at": "2026-05-09T11:49:58.966261+00:00",
-      "samples": 16499,
+      "trained_at": "2026-05-17T04:16:40.220288+00:00",
+      "samples": 720,
       "model_name": "whale_move_forecaster__FPT",
-      "model_version": "4",
+      "model_version": "8",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
-        "direction": "gradient_boosting_classifier",
-        "sessions": "random_forest_regressor"
+        "direction": "logistic_regression",
+        "sessions": "one_session_baseline"
       }
     },
     "LPB": {
       "artifact_path": "/app/artifacts/symbol_models/LPB.joblib",
-      "trained_at": "2026-05-02T07:02:50.516908+00:00",
-      "samples": 5754,
+      "trained_at": "2026-05-11T06:28:51.536431+00:00",
+      "samples": 10271,
       "model_name": "whale_move_forecaster__LPB",
-      "model_version": "2",
+      "model_version": "3",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "extra_trees_regressor"
+      }
+    },
+    "VPB": {
+      "artifact_path": "/app/artifacts/symbol_models/VPB.joblib",
+      "trained_at": "2026-05-17T04:16:52.822150+00:00",
+      "samples": 720,
+      "model_name": "whale_move_forecaster__VPB",
+      "model_version": "10",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
@@ -27,12 +40,12 @@
         "sessions": "extra_trees_regressor"
       }
     },
-    "VPB": {
-      "artifact_path": "/app/artifacts/symbol_models/VPB.joblib",
-      "trained_at": "2026-05-09T11:45:26.122572+00:00",
-      "samples": 17619,
-      "model_name": "whale_move_forecaster__VPB",
-      "model_version": "4",
+    "VHM": {
+      "artifact_path": "/app/artifacts/symbol_models/VHM.joblib",
+      "trained_at": "2026-05-11T04:38:29.535202+00:00",
+      "samples": 18266,
+      "model_name": "whale_move_forecaster__VHM",
+      "model_version": "3",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
@@ -40,25 +53,12 @@
         "sessions": "random_forest_regressor"
       }
     },
-    "VHM": {
-      "artifact_path": "/app/artifacts/symbol_models/VHM.joblib",
-      "trained_at": "2026-05-02T07:03:22.297948+00:00",
-      "samples": 16751,
-      "model_name": "whale_move_forecaster__VHM",
-      "model_version": "2",
-      "model_alias": "production",
-      "model_source": "registry",
-      "selected_models": {
-        "direction": "random_forest_classifier",
-        "sessions": "gradient_boosting_regressor"
-      }
-    },
     "VSC": {
       "artifact_path": "/app/artifacts/symbol_models/VSC.joblib",
-      "trained_at": "2026-05-09T11:45:53.182504+00:00",
-      "samples": 13529,
+      "trained_at": "2026-05-11T06:49:53.845296+00:00",
+      "samples": 14912,
       "model_name": "whale_move_forecaster__VSC",
-      "model_version": "4",
+      "model_version": "8",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
@@ -68,28 +68,28 @@
     },
     "VCB": {
       "artifact_path": "/app/artifacts/symbol_models/VCB.joblib",
-      "trained_at": "2026-05-09T11:48:03.661944+00:00",
-      "samples": 17527,
+      "trained_at": "2026-05-17T04:16:26.903983+00:00",
+      "samples": 720,
       "model_name": "whale_move_forecaster__VCB",
-      "model_version": "4",
+      "model_version": "9",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
         "direction": "random_forest_classifier",
-        "sessions": "random_forest_regressor"
+        "sessions": "gradient_boosting_regressor"
       }
     },
     "HCM": {
       "artifact_path": "/app/artifacts/symbol_models/HCM.joblib",
-      "trained_at": "2026-05-01T14:59:40.275877+00:00",
-      "samples": 12362,
+      "trained_at": "2026-05-15T09:19:37.401712+00:00",
+      "samples": 880,
       "model_name": "whale_move_forecaster__HCM",
-      "model_version": "1",
+      "model_version": "4",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
         "direction": "gradient_boosting_classifier",
-        "sessions": "random_forest_regressor"
+        "sessions": "extra_trees_regressor"
       }
     },
     "REE": {
@@ -107,62 +107,62 @@
     },
     "BVH": {
       "artifact_path": "/app/artifacts/symbol_models/BVH.joblib",
-      "trained_at": "2026-05-02T07:04:49.854173+00:00",
-      "samples": 5380,
+      "trained_at": "2026-05-15T09:18:57.827169+00:00",
+      "samples": 720,
       "model_name": "whale_move_forecaster__BVH",
-      "model_version": "2",
+      "model_version": "5",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
-        "direction": "random_forest_classifier",
-        "sessions": "random_forest_regressor"
+        "direction": "logistic_regression",
+        "sessions": "extra_trees_regressor"
       }
     },
     "MWG": {
       "artifact_path": "/app/artifacts/symbol_models/MWG.joblib",
-      "trained_at": "2026-05-01T15:00:43.808189+00:00",
-      "samples": 18487,
+      "trained_at": "2026-05-17T04:17:05.585142+00:00",
+      "samples": 851,
       "model_name": "whale_move_forecaster__MWG",
-      "model_version": "1",
+      "model_version": "3",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
-        "direction": "random_forest_classifier",
-        "sessions": "random_forest_regressor"
+        "direction": "extra_trees_classifier",
+        "sessions": "extra_trees_regressor"
       }
     },
     "VJC": {
       "artifact_path": "/app/artifacts/symbol_models/VJC.joblib",
-      "trained_at": "2026-05-09T11:44:43.140047+00:00",
-      "samples": 11662,
+      "trained_at": "2026-05-11T06:17:27.949351+00:00",
+      "samples": 12690,
       "model_name": "whale_move_forecaster__VJC",
-      "model_version": "2",
+      "model_version": "6",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
         "direction": "random_forest_classifier",
-        "sessions": "random_forest_regressor"
+        "sessions": "extra_trees_regressor"
       }
     },
     "STB": {
       "artifact_path": "/app/artifacts/symbol_models/STB.joblib",
-      "trained_at": "2026-05-09T11:46:27.097097+00:00",
-      "samples": 18187,
+      "trained_at": "2026-05-11T06:46:24.387537+00:00",
+      "samples": 19100,
       "model_name": "whale_move_forecaster__STB",
-      "model_version": "2",
+      "model_version": "6",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
         "direction": "random_forest_classifier",
-        "sessions": "random_forest_regressor"
+        "sessions": "extra_trees_regressor"
       }
     },
     "EIB": {
       "artifact_path": "/app/artifacts/symbol_models/EIB.joblib",
-      "trained_at": "2026-05-09T11:47:01.606627+00:00",
+      "trained_at": "2026-05-10T13:07:55.560075+00:00",
       "samples": 18452,
       "model_name": "whale_move_forecaster__EIB",
-      "model_version": "2",
+      "model_version": "5",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
@@ -172,23 +172,23 @@
     },
     "PNJ": {
       "artifact_path": "/app/artifacts/symbol_models/PNJ.joblib",
-      "trained_at": "2026-05-09T11:47:28.454482+00:00",
-      "samples": 11843,
+      "trained_at": "2026-05-17T04:17:31.232765+00:00",
+      "samples": 720,
       "model_name": "whale_move_forecaster__PNJ",
-      "model_version": "2",
+      "model_version": "9",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
-        "direction": "random_forest_classifier",
-        "sessions": "random_forest_regressor"
+        "direction": "hist_gradient_boosting_classifier",
+        "sessions": "one_session_baseline"
       }
     },
     "KBC": {
       "artifact_path": "/app/artifacts/symbol_models/KBC.joblib",
-      "trained_at": "2026-05-09T11:48:31.272474+00:00",
+      "trained_at": "2026-05-10T13:09:14.470236+00:00",
       "samples": 12311,
       "model_name": "whale_move_forecaster__KBC",
-      "model_version": "2",
+      "model_version": "5",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
@@ -198,10 +198,10 @@
     },
     "VCI": {
       "artifact_path": "/app/artifacts/symbol_models/VCI.joblib",
-      "trained_at": "2026-05-09T11:49:04.014557+00:00",
-      "samples": 18646,
+      "trained_at": "2026-05-11T07:10:32.727235+00:00",
+      "samples": 18566,
       "model_name": "whale_move_forecaster__VCI",
-      "model_version": "2",
+      "model_version": "6",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
@@ -211,15 +211,236 @@
     },
     "GAS": {
       "artifact_path": "/app/artifacts/symbol_models/GAS.joblib",
-      "trained_at": "2026-05-09T11:49:29.718995+00:00",
-      "samples": 12462,
+      "trained_at": "2026-05-11T04:28:18.351300+00:00",
+      "samples": 13478,
       "model_name": "whale_move_forecaster__GAS",
-      "model_version": "2",
+      "model_version": "6",
       "model_alias": "production",
       "model_source": "registry",
       "selected_models": {
         "direction": "random_forest_classifier",
         "sessions": "random_forest_regressor"
+      }
+    },
+    "GMD": {
+      "artifact_path": "/app/artifacts/symbol_models/GMD.joblib",
+      "trained_at": "2026-05-11T07:29:38.805814+00:00",
+      "samples": 8701,
+      "model_name": "whale_move_forecaster__GMD",
+      "model_version": "2",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "extra_trees_regressor"
+      }
+    },
+    "PLX": {
+      "artifact_path": "/app/artifacts/symbol_models/PLX.joblib",
+      "trained_at": "2026-05-11T04:27:49.722982+00:00",
+      "samples": 19181,
+      "model_name": "whale_move_forecaster__PLX",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "PVD": {
+      "artifact_path": "/app/artifacts/symbol_models/PVD.joblib",
+      "trained_at": "2026-05-11T04:31:24.994116+00:00",
+      "samples": 16652,
+      "model_name": "whale_move_forecaster__PVD",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "VRE": {
+      "artifact_path": "/app/artifacts/symbol_models/VRE.joblib",
+      "trained_at": "2026-05-11T04:37:53.233984+00:00",
+      "samples": 18866,
+      "model_name": "whale_move_forecaster__VRE",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "GVR": {
+      "artifact_path": "/app/artifacts/symbol_models/GVR.joblib",
+      "trained_at": "2026-05-11T04:44:45.477114+00:00",
+      "samples": 16425,
+      "model_name": "whale_move_forecaster__GVR",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "gradient_boosting_classifier",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "HDB": {
+      "artifact_path": "/app/artifacts/symbol_models/HDB.joblib",
+      "trained_at": "2026-05-11T04:57:30.004373+00:00",
+      "samples": 19069,
+      "model_name": "whale_move_forecaster__HDB",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "logistic_regression",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "DCM": {
+      "artifact_path": "/app/artifacts/symbol_models/DCM.joblib",
+      "trained_at": "2026-05-11T06:50:39.045204+00:00",
+      "samples": 18854,
+      "model_name": "whale_move_forecaster__DCM",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "SAB": {
+      "artifact_path": "/app/artifacts/symbol_models/SAB.joblib",
+      "trained_at": "2026-05-11T06:55:27.029892+00:00",
+      "samples": 10905,
+      "model_name": "whale_move_forecaster__SAB",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "gradient_boosting_classifier",
+        "sessions": "extra_trees_regressor"
+      }
+    },
+    "VIB": {
+      "artifact_path": "/app/artifacts/symbol_models/VIB.joblib",
+      "trained_at": "2026-05-11T07:08:34.255184+00:00",
+      "samples": 12976,
+      "model_name": "whale_move_forecaster__VIB",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "BCM": {
+      "artifact_path": "/app/artifacts/symbol_models/BCM.joblib",
+      "trained_at": "2026-05-11T07:17:51.332489+00:00",
+      "samples": 4116,
+      "model_name": "whale_move_forecaster__BCM",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "extra_trees_regressor"
+      }
+    },
+    "POW": {
+      "artifact_path": "/app/artifacts/symbol_models/POW.joblib",
+      "trained_at": "2026-05-11T07:23:38.810851+00:00",
+      "samples": 18783,
+      "model_name": "whale_move_forecaster__POW",
+      "model_version": "1",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "DGC": {
+      "artifact_path": "/app/artifacts/symbol_models/DGC.joblib",
+      "trained_at": "2026-05-15T09:18:17.832138+00:00",
+      "samples": 720,
+      "model_name": "whale_move_forecaster__DGC",
+      "model_version": "2",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "random_forest_classifier",
+        "sessions": "extra_trees_regressor"
+      }
+    },
+    "SSB": {
+      "artifact_path": "/app/artifacts/symbol_models/SSB.joblib",
+      "trained_at": "2026-05-15T09:19:25.906192+00:00",
+      "samples": 880,
+      "model_name": "whale_move_forecaster__SSB",
+      "model_version": "2",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "logistic_regression",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "TCB": {
+      "artifact_path": "/app/artifacts/symbol_models/TCB.joblib",
+      "trained_at": "2026-05-15T09:18:35.202365+00:00",
+      "samples": 720,
+      "model_name": "whale_move_forecaster__TCB",
+      "model_version": "2",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "logistic_regression",
+        "sessions": "random_forest_regressor"
+      }
+    },
+    "CTG": {
+      "artifact_path": "/app/artifacts/symbol_models/CTG.joblib",
+      "trained_at": "2026-05-15T09:19:09.070952+00:00",
+      "samples": 720,
+      "model_name": "whale_move_forecaster__CTG",
+      "model_version": "2",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "logistic_regression",
+        "sessions": "extra_trees_regressor"
+      }
+    },
+    "VIC": {
+      "artifact_path": "/app/artifacts/symbol_models/VIC.joblib",
+      "trained_at": "2026-05-15T09:19:43.211428+00:00",
+      "samples": 720,
+      "model_name": "whale_move_forecaster__VIC",
+      "model_version": "2",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "logistic_regression",
+        "sessions": "gradient_boosting_regressor"
+      }
+    },
+    "DIG": {
+      "artifact_path": "/app/artifacts/symbol_models/DIG.joblib",
+      "trained_at": "2026-05-15T09:19:31.636257+00:00",
+      "samples": 880,
+      "model_name": "whale_move_forecaster__DIG",
+      "model_version": "2",
+      "model_alias": "production",
+      "model_source": "registry",
+      "selected_models": {
+        "direction": "gradient_boosting_classifier",
+        "sessions": "extra_trees_regressor"
       }
     }
   }

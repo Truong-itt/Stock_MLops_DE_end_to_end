@@ -115,6 +115,10 @@ class ServingMixin:
         min_innovation_abs: Optional[float] = 0.0,
         fallback_min_prob_up: float = 0.88,
         enable_filter: bool = True,
+        min_top10_samples: int = 30,
+        min_top10_precision: float = 0.7,
+        min_top10_win_rate: float = 0.55,
+        min_evaluated_days: int = 3,
     ) -> Dict[str, Any]:
         result = self.rolling_backtest(
             lookback_days=lookback_days,
@@ -139,10 +143,35 @@ class ServingMixin:
             ranking="prob_up_long",
             bucket="top_10pct_prob_up",
         )
-        threshold = top10_prob_up.get("min_prob_up") if isinstance(top10_prob_up, dict) else None
-        if threshold is None:
-            threshold = fallback_min_prob_up
-        threshold = min(1.0, max(0.0, float(threshold)))
+        existing_filter = self.get_trade_filter_config()
+        existing_threshold = float(existing_filter.get("min_prob_up", fallback_min_prob_up))
+        fallback_threshold = min(1.0, max(0.0, float(fallback_min_prob_up)))
+        candidate_threshold = top10_prob_up.get("min_prob_up") if isinstance(top10_prob_up, dict) else None
+        candidate_threshold = (
+            None if candidate_threshold is None else min(1.0, max(0.0, float(candidate_threshold)))
+        )
+        top10_samples = int((top10_prob_up or {}).get("samples") or 0)
+        top10_precision = float((top10_prob_up or {}).get("precision_direction") or 0.0)
+        top10_win_rate = float((top10_prob_up or {}).get("paper_win_rate") or 0.0)
+        evaluated_days = int(result.get("evaluated_date_count") or 0)
+
+        guard_checks = {
+            "has_candidate_threshold": candidate_threshold is not None,
+            "min_top10_samples": top10_samples >= int(min_top10_samples),
+            "min_top10_precision": top10_precision >= float(min_top10_precision),
+            "min_top10_win_rate": top10_win_rate >= float(min_top10_win_rate),
+            "min_evaluated_days": evaluated_days >= int(min_evaluated_days),
+        }
+        accepted = bool(all(guard_checks.values()))
+        if accepted and candidate_threshold is not None:
+            selected_threshold = candidate_threshold
+            selected_source = "rolling_backtest_top10_prob_up"
+            decision_reason = "accepted_new_threshold"
+        else:
+            selected_threshold = max(existing_threshold, fallback_threshold)
+            selected_source = "rolling_backtest_top10_prob_up_guard_rejected"
+            decision_reason = "guard_rejected_keep_safe_threshold"
+
         calibrated_at = datetime.now(timezone.utc).isoformat()
         calibration_payload = {
             "method": "rolling_backtest.top_10pct_prob_up.min_prob_up",
@@ -151,19 +180,37 @@ class ServingMixin:
             "loaded_samples": result.get("loaded_samples"),
             "evaluated_date_count": result.get("evaluated_date_count"),
             "top10_prob_up": top10_prob_up or {},
+            "guard": {
+                "accepted": accepted,
+                "reason": decision_reason,
+                "checks": guard_checks,
+                "inputs": {
+                    "min_top10_samples": int(min_top10_samples),
+                    "min_top10_precision": float(min_top10_precision),
+                    "min_top10_win_rate": float(min_top10_win_rate),
+                    "min_evaluated_days": int(min_evaluated_days),
+                },
+            },
+            "candidate_min_prob_up": candidate_threshold,
+            "selected_min_prob_up": selected_threshold,
+            "existing_min_prob_up": existing_threshold,
             "fallback_min_prob_up": float(fallback_min_prob_up),
         }
         trade_filter = self.update_trade_filter_config(
-            min_prob_up=threshold,
+            min_prob_up=selected_threshold,
             enabled=enable_filter,
-            source="rolling_backtest_top10_prob_up",
+            source=selected_source,
             calibration=calibration_payload,
             calibrated_at=calibrated_at,
         )
         return {
             "trade_filter": trade_filter,
             "calibration_result": {
-                "selected_min_prob_up": threshold,
+                "selected_min_prob_up": selected_threshold,
+                "candidate_min_prob_up": candidate_threshold,
+                "accepted": accepted,
+                "reason": decision_reason,
+                "guard_checks": guard_checks,
                 "calibrated_at": calibrated_at,
                 "top10_prob_up": top10_prob_up or {},
             },
