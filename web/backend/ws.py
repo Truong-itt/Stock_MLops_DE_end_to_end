@@ -6,6 +6,7 @@ from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List, Set
+from cachetools import TTLCache
 from database import db
 from symbol_registry import SymbolRegistry
 
@@ -69,6 +70,8 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 registry = SymbolRegistry()
+daily_latest_rows_cache = TTLCache(maxsize=8, ttl=120)
+merged_snapshot_cache = TTLCache(maxsize=1, ttl=2)
 
 
 def _build_daily_map(rows: List[dict]) -> Dict[str, dict]:
@@ -125,33 +128,79 @@ def _placeholder_row(symbol: str) -> dict:
     }
 
 
+def _configured_symbols() -> List[str]:
+    return sorted({str(sym or "").upper().strip() for sym in registry.get_all_symbols() if sym})
+
+
+def _load_latest_daily_rows(symbols: List[str] = None) -> List[dict]:
+    tracked = symbols or _configured_symbols()
+    tracked = [str(sym or "").upper().strip() for sym in tracked if sym]
+    tracked = sorted(set(tracked))
+
+    if not tracked:
+        tracked = sorted(
+            {
+                str(row.get("symbol") or "").upper().strip()
+                for row in db.execute("SELECT symbol FROM stock_latest_prices")
+                if row.get("symbol")
+            }
+        )
+    if not tracked:
+        return []
+
+    cache_key = tuple(tracked)
+    cached = daily_latest_rows_cache.get(cache_key)
+    if cached is not None:
+        return [dict(row) for row in cached]
+
+    # Batch query instead of N+1: fetch all symbols in one query, deduplicate by trade_date desc
+    placeholders = ", ".join(["%s"] * len(tracked))
+    query = f"""
+        SELECT symbol, trade_date, open, high, low, close, volume,
+               change, change_percent, vwap, exchange
+        FROM stock_daily_summary
+        WHERE symbol IN ({placeholders})
+        ORDER BY symbol, trade_date DESC
+    """
+    all_rows = list(db.execute(query, tracked))
+
+    # Keep only the latest (most recent trade_date) row per symbol
+    rows = []
+    seen_symbols = set()
+    for row in all_rows:
+        sym = row.get("symbol")
+        if sym not in seen_symbols:
+            rows.append(row)
+            seen_symbols.add(sym)
+
+    daily_latest_rows_cache[cache_key] = rows
+    return [dict(row) for row in rows]
+
+
 def _fetch_merged_data() -> tuple[List[dict], str]:
     """
     Lấy stock_latest_prices (real-time), merge thêm daily_summary
     cho các symbol thiếu hoặc price=null.
     Trả về (rows, source).
     """
+    tracked = _configured_symbols()
+    tracked_set = set(tracked)
+
     latest_rows = list(db.execute(
         "SELECT symbol, price, change, change_percent, day_volume, "
         "exchange, last_size, market_hours, quote_type, timestamp "
         "FROM stock_latest_prices"
     ))
-    daily_rows = list(db.execute(
-        "SELECT symbol, trade_date, open, high, low, close, volume, "
-        "change, change_percent, vwap, exchange "
-        "FROM stock_daily_summary"
-    ))
-    registry_symbols = set(registry.get_all_symbols())
-    if registry_symbols:
-        latest_rows = [row for row in latest_rows if row.get("symbol") in registry_symbols]
-        daily_rows = [row for row in daily_rows if row.get("symbol") in registry_symbols]
+    if tracked_set:
+        latest_rows = [row for row in latest_rows if row.get("symbol") in tracked_set]
+    daily_rows = _load_latest_daily_rows(tracked if tracked else None)
 
     daily_map = _build_daily_map(daily_rows)
 
     if not latest_rows:
         merged = list(daily_rows)
         seen = {row.get("symbol") for row in merged if row.get("symbol")}
-        for sym in registry.get_all_symbols():
+        for sym in tracked:
             if sym not in seen:
                 merged.append(_placeholder_row(sym))
         return merged, "daily"
@@ -189,12 +238,27 @@ def _fetch_merged_data() -> tuple[List[dict], str]:
             merged.append(r)
 
     # Keep WS payload shape consistent with REST /stocks/latest.
-    for sym in registry.get_all_symbols():
+    for sym in tracked:
         if sym in seen or sym in daily_map:
             continue
         merged.append(_placeholder_row(sym))
 
     return merged, "merged"
+
+
+def _fetch_merged_data_cached() -> tuple[List[dict], str]:
+    cached = merged_snapshot_cache.get("merged")
+    if cached is not None:
+        rows, source = cached
+        return [dict(row) for row in rows], source
+    rows, source = _fetch_merged_data()
+    merged_snapshot_cache["merged"] = (rows, source)
+    return [dict(row) for row in rows], source
+
+
+def _fetch_merged_with_hash():
+    rows, source = _fetch_merged_data_cached()
+    return rows, source, _quick_hash(rows)
 
 
 async def poll_latest_prices():
@@ -203,8 +267,7 @@ async def poll_latest_prices():
 
     while True:
         try:
-            rows, source = _fetch_merged_data()
-            h = _quick_hash(rows)
+            rows, source, h = await asyncio.to_thread(_fetch_merged_with_hash)
 
             if h != last_hash and manager.active_connections:
                 await manager.broadcast({
@@ -296,7 +359,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         # Gửi snapshot ban đầu
         try:
-            rows, source = _fetch_merged_data()
+            rows, source = await asyncio.to_thread(_fetch_merged_data_cached)
             await websocket.send_text(json.dumps({
                 "type": "snapshot",
                 "source": source,

@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import time
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Query, HTTPException
@@ -31,11 +33,31 @@ translation_cache = TTLCache(maxsize=256, ttl=3600)
 minute_volume_cache = TTLCache(maxsize=256, ttl=75)
 daily_volume_cache = TTLCache(maxsize=256, ttl=300)
 latest_price_cache = TTLCache(maxsize=512, ttl=20)
+ohlcv_response_cache = TTLCache(maxsize=1024, ttl=120)
+changepoint_symbol_cache = TTLCache(maxsize=1024, ttl=60)
+changepoint_history_cache = TTLCache(maxsize=1024, ttl=120)
+matched_orders_response_cache = TTLCache(maxsize=512, ttl=20)
+news_response_cache = TTLCache(maxsize=512, ttl=120)
+news_search_cache = TTLCache(maxsize=512, ttl=45)
+changepoint_abnormal_cache = TTLCache(maxsize=64, ttl=12)
+market_overview_cache = TTLCache(maxsize=32, ttl=12)
+sentiment_overview_cache = TTLCache(maxsize=32, ttl=30)
+daily_latest_rows_cache = TTLCache(maxsize=8, ttl=90)
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 VALID_QUOTE_TYPES = {"EQUITY", "ETF", "MUTUALFUND", "INDEX"}
 MYMEMORY_TRANSLATE_URL = "https://api.mymemory.translated.net/get"
 WHALE_ML_URL = os.getenv("WHALE_ML_URL", "http://whale-ml-service:8090").rstrip("/")
 WHALE_ML_TIMEOUT = float(os.getenv("WHALE_ML_TIMEOUT_SEC", "6.0"))
+MATCHED_ORDERS_YF_ESTIMATE_ENABLED = str(
+    os.getenv("MATCHED_ORDERS_YF_ESTIMATE_ENABLED", "0")
+).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _log_slow_route(name: str, started_at: float, detail: str = ""):
+    elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+    if elapsed_ms >= 1000.0:
+        suffix = f" {detail}" if detail else ""
+        logger.warning("slow route %s%s took %.1fms", name, suffix, elapsed_ms)
 
 
 def _serialise(obj):
@@ -393,6 +415,93 @@ def _symbol_market_sets():
     }
 
 
+def _tracked_symbols():
+    return sorted({str(sym or "").upper().strip() for sym in registry.get_all_symbols() if sym})
+
+
+def _load_latest_daily_rows(symbols=None):
+    tracked = symbols or _tracked_symbols()
+    tracked = [str(sym or "").upper().strip() for sym in tracked if sym]
+    tracked = sorted(set(tracked))
+
+    if not tracked:
+        # Fallback when registry is empty: at least follow symbols that already
+        # have realtime rows.
+        tracked = sorted(
+            {
+                str(row.get("symbol") or "").upper().strip()
+                for row in db.execute("SELECT symbol FROM stock_latest_prices")
+                if row.get("symbol")
+            }
+        )
+    if not tracked:
+        return []
+
+    cache_key = tuple(tracked)
+    cached = daily_latest_rows_cache.get(cache_key)
+    if cached is not None:
+        return [dict(row) for row in cached]
+
+    # Batch query instead of N+1: fetch all symbols in one query, deduplicate by trade_date desc
+    placeholders = ", ".join(["%s"] * len(tracked))
+    query = f"""
+        SELECT symbol, trade_date, open, high, low, close, volume,
+               change, change_percent, vwap, exchange
+        FROM stock_daily_summary
+        WHERE symbol IN ({placeholders})
+        ORDER BY symbol, trade_date DESC
+    """
+    all_rows = list(db.execute(query, tracked))
+
+    # Keep only the latest (most recent trade_date) row per symbol
+    rows = []
+    seen_symbols = set()
+    for row in all_rows:
+        sym = row.get("symbol")
+        if sym not in seen_symbols:
+            rows.append(row)
+            seen_symbols.add(sym)
+
+    daily_latest_rows_cache[cache_key] = rows
+    return [dict(row) for row in rows]
+
+
+def _tracked_news_codes():
+    # Prefer configured symbols to avoid expensive DISTINCT scans on large news tables.
+    symbols = _tracked_symbols()
+    if symbols:
+        return symbols
+
+    codes = set()
+    for row in db.execute("SELECT DISTINCT stock_code FROM stock_news"):
+        code = str(row.get("stock_code") or "").upper().strip()
+        if code:
+            codes.add(code)
+    return sorted(codes)
+
+
+def _parse_iso_datetime_or_none(raw: Optional[str]) -> Optional[datetime]:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw))
+    except Exception:
+        return None
+
+
+def _sentiment_bucket(row: dict):
+    label = str(row.get("sentiment_label") or "").strip().lower()
+    score = _safe_float(row.get("sentiment_score"), default=0.0)
+
+    if label in {"positive", "negative", "neutral"}:
+        return label, score, True
+    if score > 0:
+        return "positive", score, False
+    if score < 0:
+        return "negative", score, False
+    return "neutral", score, False
+
+
 def _sql_quote(value: str) -> str:
     return "'" + str(value or "").replace("\\", "\\\\").replace("'", "''") + "'"
 
@@ -412,6 +521,18 @@ def _load_changepoint_latest_rows():
 def _load_changepoint_latest_row(symbol: str):
     sym = symbol.upper()
     try:
+        rows = list(
+            db.execute(
+                "SELECT * FROM stock_changepoint_latest WHERE symbol = %s",
+                [sym],
+            )
+        )
+        if rows:
+            return rows[0]
+    except Exception as exc:
+        logger.warning("Scylla changepoint latest symbol query failed, fallback ClickHouse: %s", exc)
+
+    try:
         if not ch_db.is_connected():
             ch_db.connect()
         rows = ch_db.query(
@@ -421,13 +542,7 @@ def _load_changepoint_latest_row(symbol: str):
             return rows[0]
     except Exception as exc:
         logger.warning("ClickHouse changepoint latest symbol query failed, fallback Scylla: %s", exc)
-    rows = list(
-        db.execute(
-            "SELECT * FROM stock_changepoint_latest WHERE symbol = %s",
-            [sym],
-        )
-    )
-    return rows[0] if rows else None
+    return None
 
 
 def _build_abnormal_alerts(latest_rows, daily_rows, cp_rows, limit: int = 16):
@@ -713,7 +828,7 @@ async def _attach_ml_forecast(alerts):
 
 
 @router.get("/system/symbols")
-async def get_system_symbols():
+def get_system_symbols():
     """Danh sách mã cấu hình cho producer/UI."""
     try:
         return ok(_symbol_registry_payload())
@@ -764,7 +879,7 @@ async def translate_text(payload: TranslateRequest):
 
 # ────────────────────────────── Symbols ──────────────────────────────
 @router.get("/symbols")
-async def get_all_symbols():
+def get_all_symbols():
     """Lấy danh sách tất cả mã cổ phiếu (gộp từ daily_summary + news)."""
     try:
         syms = set()
@@ -782,23 +897,19 @@ async def get_all_symbols():
 
 # ────────────────────────────── Latest Prices ────────────────────────
 @router.get("/stocks/latest")
-async def get_latest_prices():
+def get_latest_prices():
     """Lấy giá mới nhất: merge real-time + daily fallback."""
     try:
+        tracked = _tracked_symbols()
+        tracked_set = set(tracked)
         latest = list(db.execute(
             "SELECT symbol, price, change, change_percent, day_volume, "
             "exchange, last_size, market_hours, quote_type, timestamp "
             "FROM stock_latest_prices"
         ))
-        daily = list(db.execute(
-            "SELECT symbol, trade_date, open, high, low, close, volume, "
-            "change, change_percent, vwap, exchange "
-            "FROM stock_daily_summary"
-        ))
-        registry_symbols = set(registry.get_all_symbols())
-        if registry_symbols:
-            latest = [row for row in latest if row.get("symbol") in registry_symbols]
-            daily = [row for row in daily if row.get("symbol") in registry_symbols]
+        if tracked_set:
+            latest = [row for row in latest if row.get("symbol") in tracked_set]
+        daily = _load_latest_daily_rows(tracked if tracked else None)
 
         if not latest:
             return ok(daily)
@@ -831,7 +942,7 @@ async def get_latest_prices():
 
         # Keep the UI aligned with the configured registry even when a symbol
         # has just been added and no latest/daily row has arrived yet.
-        for sym in registry.get_all_symbols():
+        for sym in tracked:
             if sym in seen or sym in daily_map:
                 continue
             merged.append({
@@ -858,7 +969,7 @@ async def get_latest_prices():
 
 
 @router.get("/stocks/latest/{symbol}")
-async def get_latest_price(symbol: str):
+def get_latest_price(symbol: str):
     try:
         rows = list(db.execute(
             "SELECT * FROM stock_latest_prices WHERE symbol = %s", [symbol.upper()]
@@ -881,7 +992,7 @@ async def get_latest_price(symbol: str):
 
 # ────────────────────────────── Tick History ─────────────────────────
 @router.get("/stocks/ticks/{symbol}")
-async def get_stock_ticks(
+def get_stock_ticks(
     symbol: str,
     limit: int = Query(default=500, le=5000),
 ):
@@ -1074,7 +1185,6 @@ def _with_estimated_matched_size(rows, symbol: str, total_tick_count: int = None
     if has_native_size:
         return rows
 
-    minute_volume = _get_minute_volume_map(symbol)
     unresolved_indexes = []
     for idx, row in enumerate(rows):
         if (_to_int_or_none(row.get("matched_size")) or 0) <= 0:
@@ -1083,6 +1193,14 @@ def _with_estimated_matched_size(rows, symbol: str, total_tick_count: int = None
     if not unresolved_indexes:
         return rows
 
+    # Do not call yfinance in the hot drawer refresh path by default. It can
+    # block the single uvicorn worker for tens of seconds and stall all symbol
+    # detail APIs. Enable only when exact estimated sizes matter more than UI
+    # responsiveness.
+    if not MATCHED_ORDERS_YF_ESTIMATE_ENABLED:
+        return rows
+
+    minute_volume = _get_minute_volume_map(symbol)
     if not minute_volume:
         minute_volume = {}
 
@@ -1167,29 +1285,37 @@ def _with_matched_size(rows):
 
 
 @router.get("/stocks/matched-orders/{symbol}")
-async def get_matched_orders(
+def get_matched_orders(
     symbol: str,
     limit: int = Query(default=50, le=200),
 ):
     """Lấy lệnh khớp gần nhất từ stock_prices (tick-level)."""
+    started_at = time.perf_counter()
     try:
         sym = symbol.upper()
-        fetch_limit = min(max(limit * 4, 200), 2000)
+        safe_limit = min(max(int(limit), 1), 200)
+        cache_key = f"{sym}|{safe_limit}"
+        cached = matched_orders_response_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        fetch_limit = min(safe_limit + 1, 201)
         rows = list(db.execute(
             "SELECT timestamp, producer_timestamp, price, last_size, day_volume, change, change_percent "
             "FROM stock_prices WHERE symbol = %s LIMIT %s",
             [sym, fetch_limit],
         ))
-        count_rows = list(db.execute(
-            "SELECT COUNT(*) as cnt FROM stock_prices WHERE symbol = %s",
-            [sym],
-        ))
-        total = count_rows[0]["cnt"] if count_rows else len(rows)
+        # Avoid COUNT(*) on the hot 3-second refresh path; it is expensive in
+        # Scylla/Cassandra and the UI only needs a rough metadata number.
+        total = len(rows)
         rows.sort(key=_matched_sort_key, reverse=True)
         rows = _with_matched_size(rows)
         rows = _with_estimated_matched_size(rows, sym, total_tick_count=total)
-        rows = rows[:limit]
-        return {"status": "ok", "data": _serialise(rows), "total_count": total}
+        rows = rows[:safe_limit]
+        payload = {"status": "ok", "data": _serialise(rows), "total_count": total}
+        matched_orders_response_cache[cache_key] = payload
+        _log_slow_route("matched-orders", started_at, sym)
+        return payload
     except Exception as e:
         logger.error(f"get_matched_orders({symbol}): {e}")
         raise HTTPException(500, detail=str(e))
@@ -1300,17 +1426,17 @@ def _resolve_ohlcv(symbol: str, interval: str, bucket_date: Optional[str] = None
     # Kế hoạch theo preset range mới của UI.
     preset_plans = {
         "1d": [
-            {"type": "intraday", "interval": "5m", "lookback_days": 10},
-            {"type": "intraday", "interval": "1h", "lookback_days": 30},
+            {"type": "intraday", "interval": "5m", "lookback_days": 2},
+            {"type": "intraday", "interval": "1h", "lookback_days": 7},
             {"type": "daily", "days": 30},
         ],
         "1w": [
-            {"type": "intraday", "interval": "1h", "lookback_days": 45},
-            {"type": "intraday", "interval": "3h", "lookback_days": 90},
+            {"type": "intraday", "interval": "1h", "lookback_days": 10},
+            {"type": "intraday", "interval": "3h", "lookback_days": 21},
             {"type": "daily", "days": 90},
         ],
         "1mo": [
-            {"type": "intraday", "interval": "6h", "lookback_days": 180},
+            {"type": "intraday", "interval": "6h", "lookback_days": 45},
             {"type": "daily", "days": 180},
         ],
         "3mo": [
@@ -1401,14 +1527,22 @@ def _resolve_ohlcv(symbol: str, interval: str, bucket_date: Optional[str] = None
 
 # ────────────────────────────── OHLCV Aggregated ─────────────────────
 @router.get("/stocks/ohlcv/{symbol}")
-async def get_ohlcv(
+def get_ohlcv(
     symbol: str,
     interval: str = Query(default="1d"),
     bucket_date: Optional[str] = Query(default=None),
 ):
+    started_at = time.perf_counter()
     try:
+        cache_key = f"{symbol.upper()}|{str(interval).lower()}|{bucket_date or ''}"
+        cached = ohlcv_response_cache.get(cache_key)
+        if cached is not None:
+            return cached
         rows, meta = _resolve_ohlcv(symbol, interval, bucket_date)
-        return {"status": "ok", "data": _serialise(rows), "meta": _serialise(meta)}
+        payload = {"status": "ok", "data": _serialise(rows), "meta": _serialise(meta)}
+        ohlcv_response_cache[cache_key] = payload
+        _log_slow_route("ohlcv", started_at, f"{symbol.upper()} {interval}")
+        return payload
     except Exception as e:
         logger.error(f"get_ohlcv({symbol}, {interval}): {e}")
         raise HTTPException(500, detail=str(e))
@@ -1416,7 +1550,7 @@ async def get_ohlcv(
 
 # ────────────────────────────── Daily Summary ────────────────────────
 @router.get("/stocks/daily")
-async def get_all_daily_summary():
+def get_all_daily_summary():
     """Trả về toàn bộ daily summary (tất cả symbols)."""
     try:
         rows = list(db.execute("SELECT * FROM stock_daily_summary"))
@@ -1427,7 +1561,7 @@ async def get_all_daily_summary():
 
 
 @router.get("/stocks/daily/{symbol}")
-async def get_daily_summary(
+def get_daily_summary(
     symbol: str,
     limit: int = Query(default=30, le=365),
 ):
@@ -1486,7 +1620,7 @@ def _load_changepoint_history(symbol: str, days: int = 5, limit: int = 120):
 
 
 @router.get("/changepoint/latest")
-async def get_all_changepoint_latest():
+def get_all_changepoint_latest():
     """Trả về trạng thái changepoint mới nhất của toàn bộ mã."""
     try:
         rows = _load_changepoint_latest_rows()
@@ -1498,41 +1632,72 @@ async def get_all_changepoint_latest():
 
 
 @router.get("/changepoint/abnormal")
-async def get_abnormal_changepoint_alerts(limit: int = Query(default=16, ge=1, le=50)):
+async def get_abnormal_changepoint_alerts(
+    limit: int = Query(default=16, ge=1, le=50),
+    include_ml: bool = Query(default=False),
+):
     """Danh sách mã nghi vấn bất thường / whale-watch lấy từ module BOCPD."""
     try:
-        latest = list(
-            db.execute(
-                "SELECT symbol, price, change, change_percent, day_volume, "
-                "exchange, last_size, market_hours, timestamp "
-                "FROM stock_latest_prices"
+        cache_key = f"{int(limit)}|ml:{1 if include_ml else 0}"
+        cached = changepoint_abnormal_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        tracked = _tracked_symbols()
+        tracked_set = set(tracked)
+
+        latest_task = asyncio.to_thread(
+            lambda: list(
+                db.execute(
+                    "SELECT symbol, price, change, change_percent, day_volume, "
+                    "exchange, last_size, market_hours, timestamp "
+                    "FROM stock_latest_prices"
+                )
             )
         )
-        daily = list(
-            db.execute(
-                "SELECT symbol, trade_date, open, high, low, close, volume, "
-                "change, change_percent, vwap, exchange "
-                "FROM stock_daily_summary"
-            )
-        )
-        cp_rows = _load_changepoint_latest_rows()
+        daily_task = asyncio.to_thread(_load_latest_daily_rows, tracked if tracked else None)
+        cp_rows_task = asyncio.to_thread(_load_changepoint_latest_rows)
+        latest, daily, cp_rows = await asyncio.gather(latest_task, daily_task, cp_rows_task)
+
+        if tracked_set:
+            latest = [row for row in latest if row.get("symbol") in tracked_set]
+
         alerts, summary = _build_abnormal_alerts(latest, daily, cp_rows, limit=limit)
-        alerts, ml_summary = await _attach_ml_forecast(alerts)
+        if include_ml:
+            alerts, ml_summary = await _attach_ml_forecast(alerts)
+        else:
+            ml_summary = {
+                "enabled": False,
+                "requested": len(alerts),
+                "predicted": 0,
+                "up_forecast_count": 0,
+                "down_forecast_count": 0,
+            }
         summary["ml_forecast"] = ml_summary
-        return ok({"summary": summary, "alerts": alerts})
+        payload = ok({"summary": summary, "alerts": alerts})
+        changepoint_abnormal_cache[cache_key] = payload
+        return payload
     except Exception as e:
         logger.error(f"get_abnormal_changepoint_alerts: {e}")
         raise HTTPException(500, detail=str(e))
 
 
 @router.get("/changepoint/{symbol}")
-async def get_changepoint_latest(symbol: str):
+def get_changepoint_latest(symbol: str):
     """Trả về trạng thái changepoint mới nhất của một mã."""
+    started_at = time.perf_counter()
     try:
+        sym = symbol.upper()
+        cached = changepoint_symbol_cache.get(sym)
+        if cached is not None:
+            return cached
         row = _load_changepoint_latest_row(symbol)
         if not row:
             raise HTTPException(404, detail="Changepoint signal not found for symbol")
-        return ok(row)
+        payload = ok(row)
+        changepoint_symbol_cache[sym] = payload
+        _log_slow_route("changepoint-latest", started_at, sym)
+        return payload
     except HTTPException:
         raise
     except Exception as e:
@@ -1541,14 +1706,23 @@ async def get_changepoint_latest(symbol: str):
 
 
 @router.get("/changepoint/{symbol}/history")
-async def get_changepoint_history(
+def get_changepoint_history(
     symbol: str,
     limit: int = Query(default=120, le=500),
     days: int = Query(default=5, le=14),
 ):
     """Trả về lịch sử BOCPD để web vẽ biểu đồ r_t theo thời gian."""
+    started_at = time.perf_counter()
     try:
-        return ok(_load_changepoint_history(symbol, days=days, limit=limit))
+        sym = symbol.upper()
+        cache_key = f"{sym}|{int(days)}|{int(limit)}"
+        cached = changepoint_history_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        payload = ok(_load_changepoint_history(symbol, days=days, limit=limit))
+        changepoint_history_cache[cache_key] = payload
+        _log_slow_route("changepoint-history", started_at, sym)
+        return payload
     except Exception as e:
         logger.error(f"get_changepoint_history({symbol}): {e}")
         raise HTTPException(500, detail=str(e))
@@ -1556,18 +1730,19 @@ async def get_changepoint_history(
 
 # ────────────────────────────── News ─────────────────────────────────
 @router.get("/news")
-async def get_all_news(limit: int = Query(default=50, le=200)):
+def get_all_news(limit: int = Query(default=50, le=200)):
     """Trả về tin tức mới nhất từ tất cả mã."""
     try:
-        codes = [r["stock_code"] for r in db.execute("SELECT DISTINCT stock_code FROM stock_news")]
+        codes = _tracked_news_codes()
         all_news = []
+        per_code_limit = min(8, max(2, int(limit)))
         for code in codes:
             rows = list(db.execute(
                 "SELECT * FROM stock_news WHERE stock_code = %s LIMIT %s",
-                [code, 5],
+                [code, per_code_limit],
             ))
             all_news.extend(rows)
-        all_news.sort(key=lambda x: x.get("date") or "", reverse=True)
+        all_news.sort(key=lambda x: x.get("date") or datetime.min, reverse=True)
         return ok(all_news[:limit])
     except Exception as e:
         logger.error(f"get_all_news: {e}")
@@ -1575,7 +1750,7 @@ async def get_all_news(limit: int = Query(default=50, le=200)):
 
 
 @router.get("/news/search")
-async def search_news(
+def search_news(
     q: str = Query(default=""),
     date_from: Optional[str] = Query(default=None),
     date_to: Optional[str] = Query(default=None),
@@ -1584,11 +1759,39 @@ async def search_news(
 ):
     """Search news with optional filters: keyword, date range, stock_code."""
     try:
-        codes = [stock_code.upper()] if stock_code else [
-            r["stock_code"] for r in db.execute("SELECT DISTINCT stock_code FROM stock_news")
-        ]
+        normalized_stock_code = str(stock_code or "").upper().strip()
+        q_norm = str(q or "").strip().lower()
+
+        parsed_from = _parse_iso_datetime_or_none(date_from)
+        parsed_to = _parse_iso_datetime_or_none(date_to)
+        if parsed_to is not None and date_to and len(str(date_to).strip()) == 10:
+            parsed_to = parsed_to + timedelta(days=1) - timedelta(microseconds=1)
+        if parsed_from is None and parsed_to is None:
+            parsed_from = datetime.utcnow() - timedelta(days=7)
+
+        cache_key = (
+            f"q={q_norm}|df={parsed_from.isoformat() if parsed_from else ''}|"
+            f"dt={parsed_to.isoformat() if parsed_to else ''}|"
+            f"code={normalized_stock_code}|limit={int(limit)}"
+        )
+        cached = news_search_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        codes = [normalized_stock_code] if normalized_stock_code else _tracked_news_codes()
+        if not codes:
+            payload = ok([])
+            news_search_cache[cache_key] = payload
+            return payload
+
         all_news = []
-        per_code_limit = 20 if not stock_code else limit
+        if normalized_stock_code:
+            per_code_limit = min(max(int(limit), 20), 200)
+        else:
+            # Keep this bounded to avoid over-fetching per symbol while still
+            # returning enough rows after keyword/date filters.
+            per_code_limit = min(40, max(6, (int(limit) * 3 + len(codes) - 1) // len(codes)))
+
         for code in codes:
             rows = list(db.execute(
                 "SELECT * FROM stock_news WHERE stock_code = %s LIMIT %s",
@@ -1597,55 +1800,66 @@ async def search_news(
             all_news.extend(rows)
 
         # Apply filters
-        if q:
-            ql = q.lower()
-            all_news = [n for n in all_news if ql in (n.get("title") or "").lower() or ql in (n.get("content") or "").lower()]
+        if q_norm:
+            all_news = [
+                n for n in all_news
+                if q_norm in (n.get("title") or "").lower()
+                or q_norm in (n.get("content") or "").lower()
+            ]
 
-        # Mặc định: 7 ngày gần nhất nếu không truyền date range
-        if not date_from and not date_to:
-            df = datetime.utcnow() - timedelta(days=7)
-            all_news = [n for n in all_news if n.get("date") and n["date"] >= df]
+        if parsed_from is not None:
+            all_news = [n for n in all_news if n.get("date") and n["date"] >= parsed_from]
 
-        if date_from:
-            try:
-                df = datetime.fromisoformat(date_from)
-                all_news = [n for n in all_news if n.get("date") and n["date"] >= df]
-            except Exception:
-                pass
+        if parsed_to is not None:
+            all_news = [n for n in all_news if n.get("date") and n["date"] <= parsed_to]
 
-        if date_to:
-            try:
-                dt = datetime.fromisoformat(date_to)
-                all_news = [n for n in all_news if n.get("date") and n["date"] <= dt]
-            except Exception:
-                pass
-
-        all_news.sort(key=lambda x: x.get("date") or "", reverse=True)
-        return ok(all_news[:limit])
+        all_news.sort(key=lambda x: x.get("date") or datetime.min, reverse=True)
+        payload = ok(all_news[:limit])
+        news_search_cache[cache_key] = payload
+        return payload
     except Exception as e:
         logger.error(f"search_news: {e}")
         raise HTTPException(500, detail=str(e))
 
 
 @router.get("/news/{stock_code}")
-async def get_stock_news(
+def get_stock_news(
     stock_code: str,
     limit: int = Query(default=20, le=100),
     days: int = Query(default=7, le=365),
 ):
+    started_at = time.perf_counter()
     try:
+        code = stock_code.upper()
+        cache_key = f"{code}|{int(limit)}|{int(days)}"
+        cached = news_response_cache.get(cache_key)
+        if cached is not None:
+            return cached
         from datetime import datetime, timedelta
         cutoff = datetime.utcnow() - timedelta(days=days)
-        # ScyllaDB: lọc theo stock_code, sau đó filter theo date trong Python
+        # stock_news is clustered by date DESC, so a bounded LIMIT keeps this
+        # endpoint fast for the hot 7-day UI path.
+        fetch_limit = min(max(int(limit) * 10, 120), 2000)
         all_rows = list(db.execute(
-            "SELECT * FROM stock_news WHERE stock_code = %s",
-            [stock_code.upper()],
+            "SELECT * FROM stock_news WHERE stock_code = %s LIMIT %s",
+            [code, fetch_limit],
         ))
         # Filter các tin trong khoảng thời gian mong muốn
         filtered = [r for r in all_rows if r.get("date") and r["date"] >= cutoff]
+        # For wide lookback windows, do one full scan only if the bounded fetch
+        # does not satisfy the requested limit.
+        if len(filtered) < int(limit) and int(days) > 30:
+            all_rows = list(db.execute(
+                "SELECT * FROM stock_news WHERE stock_code = %s",
+                [code],
+            ))
+            filtered = [r for r in all_rows if r.get("date") and r["date"] >= cutoff]
         # Sort theo date mới nhất trước, lấy tối đa limit
         filtered.sort(key=lambda x: x.get("date") or datetime.min, reverse=True)
-        return ok(filtered[:limit])
+        payload = ok(filtered[:limit])
+        news_response_cache[cache_key] = payload
+        _log_slow_route("news-symbol", started_at, code)
+        return payload
     except Exception as e:
         logger.error(f"get_stock_news({stock_code}): {e}")
         raise HTTPException(500, detail=str(e))
@@ -1653,20 +1867,32 @@ async def get_stock_news(
 
 # ────────────────────────────── Market Overview ─────────────────────
 @router.get("/market/overview")
-async def get_market_overview():
+async def get_market_overview(include_ml: bool = Query(default=False)):
     """Dữ liệu tổng quan thị trường: breadth chart + top stocks."""
     try:
-        latest = list(db.execute(
-            "SELECT symbol, price, change, change_percent, day_volume, "
-            "exchange, last_size, market_hours, timestamp "
-            "FROM stock_latest_prices"
-        ))
-        daily = list(db.execute(
-            "SELECT symbol, trade_date, open, high, low, close, volume, "
-            "change, change_percent, vwap, exchange "
-            "FROM stock_daily_summary"
-        ))
-        cp_rows = _load_changepoint_latest_rows()
+        cache_key = f"ml:{1 if include_ml else 0}"
+        cached = market_overview_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        tracked = _tracked_symbols()
+        tracked_set = set(tracked)
+
+        latest_task = asyncio.to_thread(
+            lambda: list(
+                db.execute(
+                    "SELECT symbol, price, change, change_percent, day_volume, "
+                    "exchange, last_size, market_hours, timestamp "
+                    "FROM stock_latest_prices"
+                )
+            )
+        )
+        daily_task = asyncio.to_thread(_load_latest_daily_rows, tracked if tracked else None)
+        cp_rows_task = asyncio.to_thread(_load_changepoint_latest_rows)
+        latest, daily, cp_rows = await asyncio.gather(latest_task, daily_task, cp_rows_task)
+
+        if tracked_set:
+            latest = [row for row in latest if row.get("symbol") in tracked_set]
 
         # Merge latest + daily
         daily_map = _build_daily_map(daily)
@@ -1731,10 +1957,19 @@ async def get_market_overview():
                 decliners += 1
 
         alerts, alert_summary = _build_abnormal_alerts(latest, daily, cp_rows, limit=50)
-        alerts, ml_summary = await _attach_ml_forecast(alerts)
+        if include_ml:
+            alerts, ml_summary = await _attach_ml_forecast(alerts)
+        else:
+            ml_summary = {
+                "enabled": False,
+                "requested": len(alerts),
+                "predicted": 0,
+                "up_forecast_count": 0,
+                "down_forecast_count": 0,
+            }
         alert_summary["ml_forecast"] = ml_summary
 
-        return ok({
+        payload = ok({
             "breadth": {
                 "labels": bucket_labels,
                 "values": bucket_vals,
@@ -1746,6 +1981,8 @@ async def get_market_overview():
             "alerts": _serialise(alerts),
             "alert_summary": _serialise(alert_summary),
         })
+        market_overview_cache[cache_key] = payload
+        return payload
     except Exception as e:
         logger.error(f"get_market_overview: {e}")
         raise HTTPException(500, detail=str(e))
@@ -1753,7 +1990,7 @@ async def get_market_overview():
 
 # ────────────────────────────── Dashboard Stats ──────────────────────
 @router.get("/dashboard/stats")
-async def get_dashboard_stats():
+def get_dashboard_stats():
     """Thống kê tổng quan cho dashboard."""
     try:
         daily = list(db.execute("SELECT * FROM stock_daily_summary"))
@@ -1810,14 +2047,14 @@ SECTOR_MAP = {
 
 
 @router.get("/sectors")
-async def get_sectors():
+def get_sectors():
     """Trả về danh sách sectors và mapping symbol → sector."""
     sectors = sorted(set(SECTOR_MAP.values()))
     return ok({"sectors": sectors, "mapping": SECTOR_MAP})
 
 
 @router.get("/sectors/{sector}")
-async def get_stocks_by_sector(sector: str):
+def get_stocks_by_sector(sector: str):
     """Trả về danh sách symbols thuộc một sector."""
     symbols = [sym for sym, sec in SECTOR_MAP.items() if sec.lower() == sector.lower()]
     if not symbols:
@@ -1827,26 +2064,46 @@ async def get_stocks_by_sector(sector: str):
 
 # ────────────────────────────── Sentiment Overview ──────────────────
 @router.get("/sentiment/overview")
-async def get_sentiment_overview():
+def get_sentiment_overview():
     """Phân bố sentiment theo mã: positive / negative / neutral counts + per-stock details."""
     try:
-        codes = [r["stock_code"] for r in db.execute("SELECT DISTINCT stock_code FROM stock_news")]
+        cache_key = "default"
+        cached = sentiment_overview_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        codes = _tracked_news_codes()
         per_stock = []
         total_pos = 0
         total_neg = 0
         total_neu = 0
+        total_missing_finbert = 0
         for code in codes:
             rows = list(db.execute(
-                "SELECT sentiment_score FROM stock_news WHERE stock_code = %s LIMIT 50",
+                "SELECT sentiment_score, sentiment_label FROM stock_news WHERE stock_code = %s LIMIT 50",
                 [code],
             ))
-            pos = sum(1 for r in rows if (r.get("sentiment_score") or 0) > 0)
-            neg = sum(1 for r in rows if (r.get("sentiment_score") or 0) < 0)
-            neu = len(rows) - pos - neg
-            avg_score = sum(r.get("sentiment_score") or 0 for r in rows) / len(rows) if rows else 0
+            pos = 0
+            neg = 0
+            neu = 0
+            missing_finbert = 0
+            score_sum = 0.0
+            for row in rows:
+                bucket, score, has_finbert = _sentiment_bucket(row)
+                if not has_finbert:
+                    missing_finbert += 1
+                score_sum += score
+                if bucket == "positive":
+                    pos += 1
+                elif bucket == "negative":
+                    neg += 1
+                else:
+                    neu += 1
+            avg_score = score_sum / len(rows) if rows else 0
             total_pos += pos
             total_neg += neg
             total_neu += neu
+            total_missing_finbert += missing_finbert
             market = registry.get_market_for_symbol(code) or "world"
             per_stock.append({
                 "symbol": code,
@@ -1855,13 +2112,27 @@ async def get_sentiment_overview():
                 "neutral": neu,
                 "total": len(rows),
                 "avg_score": round(avg_score, 4),
+                "missing_finbert": missing_finbert,
+                "finbert_coverage": round(((len(rows) - missing_finbert) / len(rows)) * 100, 2) if rows else 0.0,
                 "market": market,
             })
         per_stock.sort(key=lambda x: x["avg_score"], reverse=True)
-        return ok({
-            "summary": {"positive": total_pos, "negative": total_neg, "neutral": total_neu, "total": total_pos + total_neg + total_neu},
+        payload = ok({
+            "summary": {
+                "positive": total_pos,
+                "negative": total_neg,
+                "neutral": total_neu,
+                "total": total_pos + total_neg + total_neu,
+                "missing_finbert": total_missing_finbert,
+                "finbert_coverage": round(
+                    ((total_pos + total_neg + total_neu - total_missing_finbert) / (total_pos + total_neg + total_neu)) * 100,
+                    2,
+                ) if (total_pos + total_neg + total_neu) else 0.0,
+            },
             "stocks": per_stock,
         })
+        sentiment_overview_cache[cache_key] = payload
+        return payload
     except Exception as e:
         logger.error(f"get_sentiment_overview: {e}")
         raise HTTPException(500, detail=str(e))
@@ -1869,7 +2140,7 @@ async def get_sentiment_overview():
 
 # ────────────────────────────── Health ───────────────────────────────
 @router.get("/health")
-async def health_check():
+def health_check():
     try:
         db.execute("SELECT now() FROM system.local")
         return {"status": "ok", "database": "connected"}
@@ -1962,7 +2233,7 @@ async def reprocess_sentiment(
 
 
 @router.get("/sentiment/status")
-async def get_sentiment_status():
+def get_sentiment_status():
     """Get statistics about sentiment analysis status."""
     try:
         # Count articles with/without FinBERT sentiment
