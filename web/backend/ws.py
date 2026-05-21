@@ -9,6 +9,7 @@ from typing import Dict, List, Set
 from cachetools import TTLCache
 from database import db
 from symbol_registry import SymbolRegistry
+from helpers import _positive_float_or_none, _is_price_scale_compatible, _tracked_symbols, _load_latest_daily_rows
 
 try:
     from cassandra.util import Date as CassDate
@@ -70,7 +71,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 registry = SymbolRegistry()
-daily_latest_rows_cache = TTLCache(maxsize=8, ttl=120)
 merged_snapshot_cache = TTLCache(maxsize=1, ttl=2)
 
 
@@ -87,25 +87,6 @@ def _build_daily_map(rows: List[dict]) -> Dict[str, dict]:
         if new_date and existing_date and str(new_date) > str(existing_date):
             daily_map[sym] = row
     return daily_map
-
-
-def _positive_float_or_none(value):
-    try:
-        if value is None:
-            return None
-        f = float(value)
-        return f if f > 0 else None
-    except Exception:
-        return None
-
-
-def _is_price_scale_compatible(base_price, candidate_price, low_ratio: float = 0.2, high_ratio: float = 5.0) -> bool:
-    base = _positive_float_or_none(base_price)
-    cand = _positive_float_or_none(candidate_price)
-    if base is None or cand is None:
-        return True
-    ratio = cand / base
-    return low_ratio <= ratio <= high_ratio
 
 
 def _placeholder_row(symbol: str) -> dict:
@@ -128,62 +109,13 @@ def _placeholder_row(symbol: str) -> dict:
     }
 
 
-def _configured_symbols() -> List[str]:
-    return sorted({str(sym or "").upper().strip() for sym in registry.get_all_symbols() if sym})
-
-
-def _load_latest_daily_rows(symbols: List[str] = None) -> List[dict]:
-    tracked = symbols or _configured_symbols()
-    tracked = [str(sym or "").upper().strip() for sym in tracked if sym]
-    tracked = sorted(set(tracked))
-
-    if not tracked:
-        tracked = sorted(
-            {
-                str(row.get("symbol") or "").upper().strip()
-                for row in db.execute("SELECT symbol FROM stock_latest_prices")
-                if row.get("symbol")
-            }
-        )
-    if not tracked:
-        return []
-
-    cache_key = tuple(tracked)
-    cached = daily_latest_rows_cache.get(cache_key)
-    if cached is not None:
-        return [dict(row) for row in cached]
-
-    # Batch query instead of N+1: fetch all symbols in one query, deduplicate by trade_date desc
-    placeholders = ", ".join(["%s"] * len(tracked))
-    query = f"""
-        SELECT symbol, trade_date, open, high, low, close, volume,
-               change, change_percent, vwap, exchange
-        FROM stock_daily_summary
-        WHERE symbol IN ({placeholders})
-        ORDER BY symbol, trade_date DESC
-    """
-    all_rows = list(db.execute(query, tracked))
-
-    # Keep only the latest (most recent trade_date) row per symbol
-    rows = []
-    seen_symbols = set()
-    for row in all_rows:
-        sym = row.get("symbol")
-        if sym not in seen_symbols:
-            rows.append(row)
-            seen_symbols.add(sym)
-
-    daily_latest_rows_cache[cache_key] = rows
-    return [dict(row) for row in rows]
-
-
 def _fetch_merged_data() -> tuple[List[dict], str]:
     """
     Lấy stock_latest_prices (real-time), merge thêm daily_summary
     cho các symbol thiếu hoặc price=null.
     Trả về (rows, source).
     """
-    tracked = _configured_symbols()
+    tracked = _tracked_symbols()
     tracked_set = set(tracked)
 
     latest_rows = list(db.execute(

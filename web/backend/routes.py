@@ -14,6 +14,7 @@ import yfinance as yf
 from database import db
 from clickhouse_db import ch_db
 from symbol_registry import SymbolRegistry
+from helpers import _positive_float_or_none, _is_price_scale_compatible, _tracked_symbols, _load_latest_daily_rows
 
 try:
     from confluent_kafka.admin import AdminClient, NewPartitions
@@ -42,7 +43,6 @@ news_search_cache = TTLCache(maxsize=512, ttl=45)
 changepoint_abnormal_cache = TTLCache(maxsize=64, ttl=12)
 market_overview_cache = TTLCache(maxsize=32, ttl=12)
 sentiment_overview_cache = TTLCache(maxsize=32, ttl=30)
-daily_latest_rows_cache = TTLCache(maxsize=8, ttl=90)
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 VALID_QUOTE_TYPES = {"EQUITY", "ETF", "MUTUALFUND", "INDEX"}
 MYMEMORY_TRANSLATE_URL = "https://api.mymemory.translated.net/get"
@@ -336,23 +336,6 @@ def _safe_int(value, default: int = 0) -> int:
             return default
 
 
-def _positive_float_or_none(value):
-    try:
-        if value is None:
-            return None
-        f = float(value)
-        return f if f > 0 else None
-    except Exception:
-        return None
-
-
-def _is_price_scale_compatible(base_price, candidate_price, low_ratio: float = 0.2, high_ratio: float = 5.0) -> bool:
-    base = _positive_float_or_none(base_price)
-    cand = _positive_float_or_none(candidate_price)
-    if base is None or cand is None:
-        return True
-    ratio = cand / base
-    return low_ratio <= ratio <= high_ratio
 
 
 def _latest_spot_price(symbol: str):
@@ -413,57 +396,6 @@ def _symbol_market_sets():
         "vn": set(markets.get("vn", {}).get("symbols", []) or []),
         "world": set(markets.get("world", {}).get("symbols", []) or []),
     }
-
-
-def _tracked_symbols():
-    return sorted({str(sym or "").upper().strip() for sym in registry.get_all_symbols() if sym})
-
-
-def _load_latest_daily_rows(symbols=None):
-    tracked = symbols or _tracked_symbols()
-    tracked = [str(sym or "").upper().strip() for sym in tracked if sym]
-    tracked = sorted(set(tracked))
-
-    if not tracked:
-        # Fallback when registry is empty: at least follow symbols that already
-        # have realtime rows.
-        tracked = sorted(
-            {
-                str(row.get("symbol") or "").upper().strip()
-                for row in db.execute("SELECT symbol FROM stock_latest_prices")
-                if row.get("symbol")
-            }
-        )
-    if not tracked:
-        return []
-
-    cache_key = tuple(tracked)
-    cached = daily_latest_rows_cache.get(cache_key)
-    if cached is not None:
-        return [dict(row) for row in cached]
-
-    # Batch query instead of N+1: fetch all symbols in one query, deduplicate by trade_date desc
-    placeholders = ", ".join(["%s"] * len(tracked))
-    query = f"""
-        SELECT symbol, trade_date, open, high, low, close, volume,
-               change, change_percent, vwap, exchange
-        FROM stock_daily_summary
-        WHERE symbol IN ({placeholders})
-        ORDER BY symbol, trade_date DESC
-    """
-    all_rows = list(db.execute(query, tracked))
-
-    # Keep only the latest (most recent trade_date) row per symbol
-    rows = []
-    seen_symbols = set()
-    for row in all_rows:
-        sym = row.get("symbol")
-        if sym not in seen_symbols:
-            rows.append(row)
-            seen_symbols.add(sym)
-
-    daily_latest_rows_cache[cache_key] = rows
-    return [dict(row) for row in rows]
 
 
 def _tracked_news_codes():
