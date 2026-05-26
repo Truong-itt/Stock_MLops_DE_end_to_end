@@ -1,0 +1,33 @@
+2026-05-20 19:02:17 @whale_ml.modeling [INFO]: Selected direction model=hist_gradient_boosting_classifier (cv_score=0.649507 via mean_roc_auc_minus_std_penalty), sessions model=gradient_boosting_regressor (cv_score=-1.603261 via neg_mean_mae_minus_std_penalty)
+2026-05-20 19:02:20 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-21 01:01:47 @whale_ml.modeling [INFO]: Selected direction model=logistic_regression (cv_score=0.619937 via mean_roc_auc_minus_std_penalty), sessions model=one_session_baseline (cv_score=-1.556977 via neg_mean_mae_minus_std_penalty)
+2026-05-21 01:01:50 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-21 07:01:48 @whale_ml.modeling [INFO]: Selected direction model=logistic_regression (cv_score=0.618451 via mean_roc_auc_minus_std_penalty), sessions model=one_session_baseline (cv_score=-1.500311 via neg_mean_mae_minus_std_penalty)
+2026-05-21 07:01:51 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-21 13:01:56 @whale_ml.modeling [INFO]: Selected direction model=random_forest_classifier (cv_score=0.646094 via mean_roc_auc_minus_std_penalty), sessions model=gradient_boosting_regressor (cv_score=-1.492893 via neg_mean_mae_minus_std_penalty)
+2026-05-21 13:01:59 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-21 19:02:14 @whale_ml.modeling [INFO]: Selected direction model=hist_gradient_boosting_classifier (cv_score=0.636479 via mean_roc_auc_minus_std_penalty), sessions model=one_session_baseline (cv_score=-1.504435 via neg_mean_mae_minus_std_penalty)
+2026-05-21 22:12:57 @whale_ml.modeling [INFO]: Connected ClickHouse for whale ML at clickhouse:8123
+2026-05-21 22:13:05 @whale_ml.modeling [INFO]: Loaded 34 promoted symbol models from local storage
+2026-05-21 22:13:05 @whale_ml.service [INFO]: Loaded existing model bundle (source=registry)
+2026-05-21 22:13:15 @whale_ml.modeling [WARNING]: Symbol challenger train failed for NVL: Symbol NVL data too small (22 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:15 @whale_ml.modeling [WARNING]: Symbol challenger train failed for STB: Symbol STB data too small (21 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:15 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VCI: Symbol VCI data too small (21 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:15 @whale_ml.modeling [WARNING]: Symbol challenger train failed for GMD: Symbol GMD data too small (21 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:15 @whale_ml.modeling [WARNING]: Symbol challenger train failed for SSI: Symbol SSI data too small (19 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:16 @whale_ml.modeling [WARNING]: Symbol challenger train failed for SAB: Symbol SAB data too small (21 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:16 @whale_ml.modeling [WARNING]: Symbol challenger train failed for PDR: Symbol PDR data too small (18 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:16 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VSC: Symbol VSC data too small (21 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:16 @whale_ml.modeling [WARNING]: Symbol challenger train failed for DPM: Symbol DPM data too small (22 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:17 @whale_ml.modeling [WARNING]: Symbol challenger train failed for FPT: Symbol FPT data too small (22 rows). Need at least 350 labeled samples.
+2026-05-21 22:13:17 @whale_ml.modeling [WARNING]: Symbol challenger train failed for BID: Symbol BID data too small (20 rows). Need at least 350 labeled samples.
+2026-05-21 22:44:13 @whale_ml.modeling [WARNING]: Symbol challenger train failed for MBB: Symbol MBB data too small (17 rows). Need at least 350 labeled samples.
+2026-05-21 22:44:13 @whale_ml.modeling [WARNING]: Symbol challenger train failed for POW: Symbol POW data too small (26 rows). Need at least 350 labeled samples.
+2026-05-21 22:49:45 @whale_ml.modeling [WARNING]: Symbol challenger train failed for MSN: Attempt to execute concurrent queries within the same session. Please use a separate client instance per thread/process.
+2026-05-21 23:10:25 @whale_ml.modeling [WARNING]: Symbol challenger train failed for HDB: Symbol HDB data too small (25 rows). Need at least 350 labeled samples.
+2026-05-22 01:02:00 @whale_ml.modeling [INFO]: Selected direction model=logistic_regression (cv_score=0.602098 via mean_roc_auc_minus_std_penalty), sessions model=gradient_boosting_regressor (cv_score=-1.498915 via neg_mean_mae_minus_std_penalty)
+2026-05-22 01:02:05 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-22 07:02:18 @whale_ml.modeling [INFO]: Selected direction model=hist_gradient_boosting_classifier (cv_score=0.582572 via mean_roc_auc_minus_std_penalty), sessions model=gradient_boosting_regressor (cv_score=-1.492134 via neg_mean_mae_minus_std_penalty)
+2026-05-22 07:02:22 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-22 13:02:01 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (cv_score=0.638193 via mean_roc_auc_minus_std_penalty), sessions model=random_forest_regressor (cv_score=-1.440728 via neg_mean_mae_minus_std_penalty)
+2026-05-22 13:02:04 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)

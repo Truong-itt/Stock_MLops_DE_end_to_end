@@ -1,0 +1,17 @@
+metric,value
+raw_n,27840
+raw_mean_ms,1249608.283979885
+raw_p50_ms,2262
+raw_p90_ms,3218
+raw_p99_ms,5309
+filtered_n,27680
+filtered_mean_ms,3220.9740968208093
+filtered_p50_ms,2256
+filtered_p90_ms,3196
+filtered_p99_ms,4408
+p50_ci_lo_ms,2241
+p50_ci_hi_ms,2269
+p90_ci_lo_ms,3181
+p90_ci_hi_ms,3211
+p99_ci_lo_ms,4331
+p99_ci_hi_ms,4524

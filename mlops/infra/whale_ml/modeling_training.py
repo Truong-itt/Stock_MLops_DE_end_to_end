@@ -151,12 +151,35 @@ class TrainingMixin:
             "metrics": metrics,
         }
 
+    _CLASSIFIER_METRIC_WHITELIST = {
+        "accuracy",
+        "accuracy_std",
+        "balanced_accuracy",
+        "roc_auc",
+        "roc_auc_std",
+        "f1_direction",
+        "direction_threshold",
+    }
+
+    _REGRESSOR_METRIC_WHITELIST = {
+        "mae_sessions",
+        "mae_sessions_std",
+        "rmse_sessions",
+        "rmse_sessions_std",
+    }
+
     def _flatten_candidate_metrics_for_mlflow(
         self,
         prefix: str,
         candidates: List[Dict[str, Any]],
     ) -> Dict[str, float]:
         payload: Dict[str, float] = {}
+        if prefix == "classifier":
+            whitelist = self._CLASSIFIER_METRIC_WHITELIST
+        elif prefix == "regressor":
+            whitelist = self._REGRESSOR_METRIC_WHITELIST
+        else:
+            whitelist = None
         for candidate in candidates:
             candidate_name = _metric_token(str(candidate.get("name")))
             candidate_score = candidate.get("score")
@@ -167,7 +190,10 @@ class TrainingMixin:
             for metric_name, metric_value in metrics.items():
                 if metric_value is None:
                     continue
-                payload[f"{prefix}_{candidate_name}_{_metric_token(str(metric_name))}"] = float(metric_value)
+                metric_key = _metric_token(str(metric_name))
+                if whitelist is not None and metric_key not in whitelist:
+                    continue
+                payload[f"{prefix}_{candidate_name}_{metric_key}"] = float(metric_value)
         return payload
 
     @staticmethod

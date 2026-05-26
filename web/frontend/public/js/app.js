@@ -6,6 +6,7 @@ const API   = window.location.origin;
 const WS_PROTO = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const WS_URL= `${WS_PROTO}://${window.location.host}/ws`;
 const MAX_LINE_POINTS = 5000;
+const INCLUDE_ML_FORECAST = 1;
 
 // ─── State ──────────────────────────────────────────────────
 let stocks      = {};          // keyed by symbol
@@ -263,6 +264,8 @@ let cpTimer = null;
 let cpSummaryTimer = null;
 let overviewSignalChart = null;
 let wlSignalChart = null;
+let hasBootSnapshot = false;
+let bootResyncTimer = null;
 
 /* ═══════════════════════════════════════════════════════════
    UTILITIES
@@ -2402,6 +2405,31 @@ const fmtTime = t => {const d=parseChartTime(t);return d?d.toLocaleTimeString("v
 const fmtDate = t => {const d=parseChartTime(t);return d?d.toLocaleDateString("vi-VN"):String(t||"--")};
 const fmtDT   = t => {const d=parseChartTime(t);return d?d.toLocaleString("vi-VN"):String(t||"--")};
 
+function getNewsSentimentMeta(news){
+  const rawLabel = String(news?.sentiment_label || "").toLowerCase();
+  const rawScore = Number(news?.sentiment_score);
+  const hasScore = Number.isFinite(rawScore);
+  const scoreText = hasScore ? rawScore.toFixed(2) : "--";
+
+  if(rawLabel === "positive"){
+    return { cls: "sent-pos", label: "Tích cực", scoreText, hasFinbert: true };
+  }
+  if(rawLabel === "negative"){
+    return { cls: "sent-neg", label: "Tiêu cực", scoreText, hasFinbert: true };
+  }
+  if(rawLabel === "neutral"){
+    return { cls: "sent-neu", label: "Trung lập", scoreText, hasFinbert: true };
+  }
+
+  if(hasScore){
+    if(rawScore > 0) return { cls: "sent-pos", label: "Sơ bộ tích cực", scoreText, hasFinbert: false };
+    if(rawScore < 0) return { cls: "sent-neg", label: "Sơ bộ tiêu cực", scoreText, hasFinbert: false };
+    return { cls: "sent-neu", label: "Chờ FinBERT", scoreText, hasFinbert: false };
+  }
+
+  return { cls: "sent-neu", label: "Chưa sentiment", scoreText, hasFinbert: false };
+}
+
 function toast(msg, type="ok"){
   if(!el.toasts) return;
   const t=document.createElement("div");
@@ -2465,7 +2493,7 @@ async function loadChangepointSummary(silent=true){
   try{
     const [respLatest, respAbnormal] = await Promise.all([
       fetch(`${API}/api/changepoint/latest`),
-      fetch(`${API}/api/changepoint/abnormal?limit=50`),
+      fetch(`${API}/api/changepoint/abnormal?limit=50&include_ml=${INCLUDE_ML_FORECAST}`),
     ]);
     const jsonLatest = await respLatest.json();
     const jsonAbnormal = await respAbnormal.json();
@@ -2528,7 +2556,7 @@ async function resyncData(showToast=true){
       loadSymbolRegistry(),
       fetch(`${API}/api/stocks/latest`).then(r=>r.json()),
       fetch(`${API}/api/changepoint/latest`).then(r=>r.json()).catch(()=>({status:"err"})),
-      fetch(`${API}/api/changepoint/abnormal?limit=50`).then(r=>r.json()).catch(()=>({status:"err"})),
+      fetch(`${API}/api/changepoint/abnormal?limit=50&include_ml=${INCLUDE_ML_FORECAST}`).then(r=>r.json()).catch(()=>({status:"err"})),
     ]);
     if(latestResp.status === "ok"){
       ingest(latestResp.data || [], true);
@@ -2636,9 +2664,17 @@ function retry(){if(!retryTimer)retryTimer=setTimeout(()=>{retryTimer=null;conne
 function handle(msg){
   switch(msg.type){
     case "snapshot":
+      hasBootSnapshot = true;
+      if(bootResyncTimer){
+        clearTimeout(bootResyncTimer);
+        bootResyncTimer = null;
+      }
+      dataSource = msg.source || "daily";
+      ingest(msg.data, true);
+      break;
     case "price_update":
       dataSource = msg.source || "daily";
-      ingest(msg.data, msg.type==="snapshot");
+      ingest(msg.data, false);
       break;
     case "ohlcv_data":  renderChart(msg.data, msg.symbol); break;
     case "news_data":   renderDrawerNews(msg.data); break;
@@ -2829,7 +2865,7 @@ function openDrawer(sym){
   cpTimer=setInterval(()=>{
     if(selected===sym) loadChangepoint(sym);
     else { clearInterval(cpTimer); cpTimer=null; }
-  }, 4000);
+  }, 15000);
 }
 
 function closeDrawer(){
@@ -3165,46 +3201,60 @@ function renderChart(data,sym){
 /* ── Changepoint / BOCPD ───────────────────────────────── */
 async function loadChangepoint(sym){
   if(!el.drCpInfo || !el.drCpChart) return;
-  try{
-    const [latestResp, historyResp] = await Promise.all([
-      fetch(`${API}/api/changepoint/${sym}`),
-      fetch(`${API}/api/changepoint/${sym}/history?limit=120&days=5`),
-    ]);
-
-    const latestJson = await latestResp.json().catch(()=>({}));
-    const historyJson = await historyResp.json().catch(()=>({}));
-
-    if(latestResp.ok && latestJson.status === "ok"){
-      cpSignals[sym] = latestJson.data;
-      renderChangepointInfo(latestJson.data, sym);
-    } else {
-      renderChangepointInfo(null, sym);
-    }
-
-    if(historyResp.ok && historyJson.status === "ok"){
-      const cpHistoryRows = historyJson.data || [];
-      drawerCpHistory = normalizeChangepointSeries(cpHistoryRows);
-      drawerCpHistorySymbol = sym;
-      renderChangepointChart(cpHistoryRows, sym);
-      if(selected === sym && drawerCandleSymbol === sym && drawerCandles?.length){
-        redrawActiveCandlestickChart();
+  const latestTask = (async () => {
+    try{
+      const latestResp = cpSignals[sym]
+        ? {
+            ok: true,
+            json: async () => ({status: "ok", data: cpSignals[sym]}),
+          }
+        : await fetch(`${API}/api/changepoint/${sym}`);
+      const latestJson = await latestResp.json().catch(()=>({}));
+      if(latestResp.ok && latestJson.status === "ok"){
+        cpSignals[sym] = latestJson.data;
+        if(selected === sym) renderChangepointInfo(latestJson.data, sym);
+      }else if(selected === sym){
+        renderChangepointInfo(null, sym);
       }
-    } else {
+    }catch(err){
+      console.error("loadChangepoint latest error:", err);
+      if(selected === sym) renderChangepointInfo(null, sym);
+    }
+  })();
+
+  const historyTask = (async () => {
+    try{
+      const historyResp = await fetch(`${API}/api/changepoint/${sym}/history?limit=60&days=2`);
+      const historyJson = await historyResp.json().catch(()=>({}));
+      if(historyResp.ok && historyJson.status === "ok"){
+        const cpHistoryRows = historyJson.data || [];
+        if(selected !== sym) return;
+        drawerCpHistory = normalizeChangepointSeries(cpHistoryRows);
+        drawerCpHistorySymbol = sym;
+        renderChangepointChart(cpHistoryRows, sym);
+        if(drawerCandleSymbol === sym && drawerCandles?.length){
+          redrawActiveCandlestickChart();
+        }
+        return;
+      }
+      if(selected !== sym) return;
       drawerCpHistory = [];
       drawerCpHistorySymbol = sym;
       drawerRunlengthSegments = [];
-      if(selected === sym) renderRunlengthStrip([], sym);
+      renderRunlengthStrip([], sym);
+      renderChangepointChart([], sym);
+    }catch(err){
+      console.error("loadChangepoint history error:", err);
+      if(selected !== sym) return;
+      drawerCpHistory = [];
+      drawerCpHistorySymbol = sym;
+      drawerRunlengthSegments = [];
+      renderRunlengthStrip([], sym);
       renderChangepointChart([], sym);
     }
-  }catch(err){
-    console.error("loadChangepoint error:", err);
-    drawerCpHistory = [];
-    drawerCpHistorySymbol = sym;
-    drawerRunlengthSegments = [];
-    if(selected === sym) renderRunlengthStrip([], sym);
-    renderChangepointInfo(null, sym);
-    renderChangepointChart([], sym);
-  }
+  })();
+
+  await Promise.allSettled([latestTask, historyTask]);
 }
 
 function renderChangepointInfo(data, symbol=selected){
@@ -3404,8 +3454,9 @@ function loadMatchedOrders(sym){
       .catch(err=>console.error("matched-orders fetch error:", err));
   };
   doLoad();
-  // Auto-refresh every 3s while drawer is open
-  moTimer=setInterval(()=>{if(selected===sym)doLoad();else{clearInterval(moTimer);moTimer=null;}},3000);
+  // Auto-refresh gently while drawer is open. A shorter interval makes symbol
+  // switching feel sluggish because each request hits tick-level storage.
+  moTimer=setInterval(()=>{if(selected===sym)doLoad();else{clearInterval(moTimer);moTimer=null;}},10000);
 }
 
 function inferMatchedOrderSide(rows, idx, fallbackSide = "buy"){
@@ -3721,23 +3772,20 @@ function renderMatchedOrders(data, totalCount, remember = true){
 /* ── Drawer News ─────────────────────────────────────────── */
 function loadDrawerNews(sym){
   el.drNews.innerHTML='<p class="muted">Đang tải …</p>';
-  if(ws&&ws.readyState===1){
-    ws.send(JSON.stringify({type:"get_news",stock_code:sym}));
-  } else {
-    fetch(`${API}/api/news/${sym}`).then(r=>r.json()).then(j=>{if(j.status==="ok")renderDrawerNews(j.data)}).catch(()=>{el.drNews.innerHTML='<p class="muted">Lỗi tải tin</p>'});
-  }
+  fetch(`${API}/api/news/${sym}`)
+    .then(r=>r.json())
+    .then(j=>{if(j.status==="ok")renderDrawerNews(j.data); else el.drNews.innerHTML='<p class="muted">Lỗi tải tin</p>';})
+    .catch(()=>{el.drNews.innerHTML='<p class="muted">Lỗi tải tin</p>'});
 }
 
 function renderDrawerNews(data){
   if(!data||!data.length){el.drNews.innerHTML='<p class="muted">Không có tin tức</p>';return}
   el.drNews.innerHTML=data.slice(0,10).map(n=>{
-    const sc=n.sentiment_score||0;
-    const sCls=sc>0?"sent-pos":sc<0?"sent-neg":"sent-neu";
-    const sLabel=sc>0?"Tích cực":sc<0?"Tiêu cực":"Trung lập";
+    const sm = getNewsSentimentMeta(n);
     const newsJson = JSON.stringify(n).replace(/"/g,'&quot;');
     return `<div class="dn-item" onclick="openNewsModal(${newsJson})" style="cursor:pointer">
       <div class="dn-title">${n.title||"Untitled"}</div>
-      <div class="dn-meta"><span>${fmtDT(n.date)}</span><span class="${sCls}">${sLabel} (${sc.toFixed(2)})</span></div>
+      <div class="dn-meta"><span>${fmtDT(n.date)}</span><span class="${sm.cls}">${sm.label} (${sm.scoreText})</span></div>
     </div>`;
   }).join("");
 }
@@ -3774,16 +3822,14 @@ async function loadAllNews(){
     const j=await r.json();
     if(j.status==="ok"&&j.data.length){
       el.newsGrid.innerHTML=j.data.map(n=>{
-        const sc=n.sentiment_score||0;
-        const sCls=sc>0?"sent-pos":sc<0?"sent-neg":"sent-neu";
-        const sLabel=sc>0?"Tích cực":sc<0?"Tiêu cực":"Trung lập";
+        const sm = getNewsSentimentMeta(n);
         const snippet=(n.content||"").slice(0,180);
         const newsJson = JSON.stringify(n).replace(/"/g,'&quot;');
         return `<div class="news-card" onclick="openNewsModal(${newsJson})" style="cursor:pointer">
           <span class="nc-code">${n.stock_code}</span>
           <div class="nc-title">${n.title||"Untitled"}</div>
           ${snippet?`<div class="nc-snippet">${snippet}…</div>`:""}
-          <div class="nc-meta"><span>${fmtDT(n.date)}</span><span class="${sCls}">${sLabel} (${sc.toFixed(2)})</span></div>
+          <div class="nc-meta"><span>${fmtDT(n.date)}</span><span class="${sm.cls}">${sm.label} (${sm.scoreText})</span></div>
         </div>`;
       }).join("");
     } else {
@@ -4354,27 +4400,32 @@ document.addEventListener('DOMContentLoaded',()=>_initOvMarketFilters());
 
 async function loadMarketOverview(){
   try{
-    const [rOv, rSent] = await Promise.all([
-      fetch(`${API}/api/market/overview`),
-      fetch(`${API}/api/sentiment/overview`),
-    ]);
-    const jOv = await rOv.json();
-    const jSent = await rSent.json();
-    if(jOv.status==="ok"){
-      _ovData = jOv.data;
-      if(jOv.data?.alerts){
-        ingestChangepointAlerts(jOv.data);
-      }
-      renderBreadthChart(jOv.data.breadth);
-      renderTopTable();
-      renderVolumeTop10Chart();
-      renderOverviewSignalChart();
-      renderOverviewAbnormalBoard();
-    }
-    if(jSent.status==="ok"){
-      _sentData = jSent.data;
-      renderSentimentChart(jSent.data);
-    }
+    const overviewTask = fetch(`${API}/api/market/overview?include_ml=${INCLUDE_ML_FORECAST}`)
+      .then(r=>r.json())
+      .then(jOv=>{
+        if(jOv.status!=="ok") return;
+        _ovData = jOv.data;
+        if(jOv.data?.alerts){
+          ingestChangepointAlerts(jOv.data);
+        }
+        renderBreadthChart(jOv.data.breadth);
+        renderTopTable();
+        renderVolumeTop10Chart();
+        renderOverviewSignalChart();
+        renderOverviewAbnormalBoard();
+      })
+      .catch(err=>console.error("overview fetch error:", err));
+
+    const sentimentTask = fetch(`${API}/api/sentiment/overview`)
+      .then(r=>r.json())
+      .then(jSent=>{
+        if(jSent.status!=="ok") return;
+        _sentData = jSent.data;
+        renderSentimentChart(jSent.data);
+      })
+      .catch(err=>console.error("sentiment overview fetch error:", err));
+
+    await Promise.allSettled([overviewTask, sentimentTask]);
   }catch(e){
     console.error('market overview error:',e);
   }
@@ -4643,12 +4694,10 @@ async function showSentimentNews(symbol){
     if(j.status==='ok' && j.data.length){
       panel.innerHTML=`<h4 style="margin:10px 0 6px;font-size:.85rem;color:var(--accent)">${symbol} — Tin tức</h4>` +
         j.data.map(n=>{
-          const sc=n.sentiment_score||0;
-          const sCls=sc>0?'sent-pos':sc<0?'sent-neg':'sent-neu';
-          const sLabel=sc>0?'Tích cực':sc<0?'Tiêu cực':'Trung lập';
+          const sm = getNewsSentimentMeta(n);
           return `<div class="dn-item" style="margin-bottom:6px;padding:8px 12px;background:var(--bg-2);border-radius:6px">
             <div class="dn-title"><a href="${n.link||'#'}" target="_blank">${n.title||'Untitled'}</a></div>
-            <div class="dn-meta"><span>${fmtDT(n.date)}</span><span class="${sCls}">${sLabel} (${sc.toFixed(2)})</span></div>
+            <div class="dn-meta"><span>${fmtDT(n.date)}</span><span class="${sm.cls}">${sm.label} (${sm.scoreText})</span></div>
           </div>`;
         }).join('');
     } else {
@@ -5429,9 +5478,7 @@ function renderWatchlistNews(filterSymbol){
   }
 
   grid.innerHTML = newsToShow.map(n=>{
-    const sc = n.sentiment_score||0;
-    const sCls = sc>0?"sent-pos":sc<0?"sent-neg":"sent-neu";
-    const sLabel = sc>0?"Tích cực":sc<0?"Tiêu cực":"Trung lập";
+    const sm = getNewsSentimentMeta(n);
     const snippet = (n.content||"").slice(0,200);
     const source = getNewsSource(n.link);
     const srcClass = source.type === 'yahoo' ? 'nc-source-yahoo' : source.type === 'google' ? 'nc-source-google' : 'nc-source-other';
@@ -5444,7 +5491,7 @@ function renderWatchlistNews(filterSymbol){
       ${source.name && source.name !== 'Yahoo Finance' && source.name !== 'Google News' ? `<div class="nc-publisher">📌 ${source.name}</div>` : ''}
       <div class="nc-title">${n.title||"Untitled"}</div>
       ${snippet?`<div class="nc-snippet">${snippet}…</div>`:""}
-      <div class="nc-meta"><span>${fmtDT(n.date)}</span><span class="${sCls}">${sLabel}</span></div>
+      <div class="nc-meta"><span>${fmtDT(n.date)}</span><span class="${sm.cls}">${sm.label} (${sm.scoreText})</span></div>
     </div>`;
   }).join('');
 }
@@ -5476,14 +5523,12 @@ function openNewsModal(newsItem){
   nmStock.textContent = newsItem.stock_code || '';
   nmTitle.textContent = newsItem.title || 'Untitled';
   
-  const sc = newsItem.sentiment_score||0;
-  const sCls = sc>0?"sent-pos":sc<0?"sent-neg":"sent-neu";
-  const sLabel = sc>0?"Tích cực":sc<0?"Tiêu cực":"Trung lập";
+  const sm = getNewsSentimentMeta(newsItem);
   
   // Add source info to meta
   const source = getNewsSource(newsItem.link);
   const srcLabel = source.type === 'yahoo' ? '📰 Yahoo Finance' : source.type === 'google' ? '🔍 Google News' : '🌐 ' + source.name;
-  nmMeta.innerHTML = `<span>${fmtDT(newsItem.date)}</span><span class="${sCls}">${sLabel} (${sc.toFixed(2)})</span><span style="margin-left:auto;font-size:.75rem;color:var(--text-2)">${srcLabel}</span>`;
+  nmMeta.innerHTML = `<span>${fmtDT(newsItem.date)}</span><span class="${sm.cls}">${sm.label} (${sm.scoreText})</span><span style="margin-left:auto;font-size:.75rem;color:var(--text-2)">${srcLabel}</span>`;
   
   nmContent.innerHTML = newsItem.content || '<p class="muted">Không có nội dung chi tiết</p>';
   nmLink.href = newsItem.link || '#';
@@ -5598,7 +5643,15 @@ document.getElementById('nmResetBtn')?.addEventListener('click', function() {
 loadSymbolRegistry().finally(()=>{
   setPriceChartMode("line", { rerender: false, force: true });
   connect();
-  resyncData(false);
+  // Fallback only: if websocket snapshot is delayed/missed, use REST bootstrap.
+  if(bootResyncTimer) clearTimeout(bootResyncTimer);
+  bootResyncTimer = setTimeout(()=>{
+    bootResyncTimer = null;
+    if(!hasBootSnapshot){
+      resyncData(false);
+    }
+  }, 3500);
+  loadChangepointSummary(true);
   if(cpSummaryTimer) clearInterval(cpSummaryTimer);
-  cpSummaryTimer = setInterval(()=>loadChangepointSummary(true), 12000);
+  cpSummaryTimer = setInterval(()=>loadChangepointSummary(true), 30000);
 });

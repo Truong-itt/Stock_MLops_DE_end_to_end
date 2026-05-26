@@ -1,0 +1,51 @@
+2026-05-25 01:01:47 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (cv_score=0.637102 via mean_roc_auc_minus_std_penalty), sessions model=random_forest_regressor (cv_score=-1.510361 via neg_mean_mae_minus_std_penalty)
+2026-05-25 01:01:50 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-25 07:01:46 @whale_ml.modeling [INFO]: Selected direction model=gradient_boosting_classifier (cv_score=0.636974 via mean_roc_auc_minus_std_penalty), sessions model=random_forest_regressor (cv_score=-1.512366 via neg_mean_mae_minus_std_penalty)
+2026-05-25 07:01:49 @whale_ml.modeling [INFO]: Global challenger was not promoted (reason=did_not_beat_champion_on_both)
+2026-05-25 13:01:45 @whale_ml.modeling [INFO]: Selected direction model=logistic_regression (cv_score=0.621365 via mean_roc_auc_minus_std_penalty), sessions model=one_session_baseline (cv_score=-1.476039 via neg_mean_mae_minus_std_penalty)
+2026-05-25 14:20:01 @whale_ml.modeling [WARNING]: Cannot write whale ML prediction audit rows: Attempt to execute concurrent queries within the same session. Please use a separate client instance per thread/process.
+2026-05-25 14:20:01 @whale_ml.modeling [WARNING]: Symbol challenger train failed for INTC: Symbol INTC data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:02 @whale_ml.modeling [WARNING]: Symbol challenger train failed for AMD: Symbol AMD data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:02 @whale_ml.modeling [WARNING]: Symbol challenger train failed for PLTR: Symbol PLTR data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:03 @whale_ml.modeling [WARNING]: Symbol challenger train failed for IBM: Symbol IBM data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:03 @whale_ml.modeling [WARNING]: Symbol challenger train failed for ORCL: Symbol ORCL data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:04 @whale_ml.modeling [WARNING]: Symbol challenger train failed for TSLA: Symbol TSLA data too small (30 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:05 @whale_ml.modeling [WARNING]: Symbol challenger train failed for NVDA: Symbol NVDA data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:05 @whale_ml.modeling [WARNING]: Symbol challenger train failed for AMZN: Symbol AMZN data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:05 @whale_ml.modeling [WARNING]: Symbol challenger train failed for JPM: Symbol JPM data too small (27 rows). Need at least 350 labeled samples.
+2026-05-25 14:20:06 @whale_ml.modeling [WARNING]: Symbol challenger train failed for BABA: Symbol BABA data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:25 @whale_ml.modeling [WARNING]: Symbol challenger train failed for ACB: Symbol ACB data too small (27 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for STB: Symbol STB data too small (21 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for BVH: Symbol BVH data too small (23 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VIB: Symbol VIB data too small (18 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VSC: Symbol VSC data too small (21 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for BCM: Symbol BCM data too small (21 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for KBC: Symbol KBC data too small (21 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:27 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VJC: Symbol VJC data too small (22 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:27 @whale_ml.modeling [WARNING]: Symbol challenger train failed for PLX: Symbol PLX data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:27 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VRE: Symbol VRE data too small (6 rows). Need at least 350 labeled samples.
+2026-05-25 15:07:27 @whale_ml.modeling [WARNING]: Symbol challenger train failed for PNJ: Symbol PNJ data too small (24 rows). Need at least 350 labeled samples.
+2026-05-25 15:41:15 @whale_ml.modeling [WARNING]: Symbol challenger train failed for REE: Symbol REE data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 19:01:45 @whale_ml.modeling [INFO]: Selected direction model=logistic_regression (cv_score=0.621784 via mean_roc_auc_minus_std_penalty), sessions model=one_session_baseline (cv_score=-1.460695 via neg_mean_mae_minus_std_penalty)
+2026-05-25 19:09:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for INTC: Symbol INTC data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:26 @whale_ml.modeling [WARNING]: Symbol challenger train failed for STB: Symbol STB data too small (23 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:26 @whale_ml.modeling [WARNING]: Cannot write whale ML prediction audit rows: Attempt to execute concurrent queries within the same session. Please use a separate client instance per thread/process.
+2026-05-25 19:09:27 @whale_ml.modeling [WARNING]: Symbol challenger train failed for AMD: Symbol AMD data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:27 @whale_ml.modeling [WARNING]: Symbol challenger train failed for PLTR: Symbol PLTR data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:27 @whale_ml.modeling [WARNING]: Symbol challenger train failed for IBM: Symbol IBM data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:28 @whale_ml.modeling [WARNING]: Symbol challenger train failed for ORCL: Symbol ORCL data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:28 @whale_ml.modeling [WARNING]: Symbol challenger train failed for TSLA: Symbol TSLA data too small (30 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:29 @whale_ml.modeling [WARNING]: Symbol challenger train failed for NVDA: Symbol NVDA data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:29 @whale_ml.modeling [WARNING]: Symbol challenger train failed for BVH: Symbol BVH data too small (23 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:30 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VIB: Symbol VIB data too small (19 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:30 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VSC: Symbol VSC data too small (22 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:30 @whale_ml.modeling [WARNING]: Symbol challenger train failed for BCM: Symbol BCM data too small (22 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:30 @whale_ml.modeling [WARNING]: Symbol challenger train failed for AMZN: Symbol AMZN data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:31 @whale_ml.modeling [WARNING]: Symbol challenger train failed for KBC: Symbol KBC data too small (20 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:31 @whale_ml.modeling [WARNING]: Symbol challenger train failed for JPM: Symbol JPM data too small (27 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:31 @whale_ml.modeling [WARNING]: Symbol challenger train failed for BABA: Symbol BABA data too small (29 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:31 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VJC: Symbol VJC data too small (22 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:31 @whale_ml.modeling [WARNING]: Symbol challenger train failed for PLX: Symbol PLX data too small (28 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:32 @whale_ml.modeling [WARNING]: Symbol challenger train failed for VRE: Symbol VRE data too small (6 rows). Need at least 350 labeled samples.
+2026-05-25 19:09:32 @whale_ml.modeling [WARNING]: Symbol challenger train failed for PNJ: Symbol PNJ data too small (24 rows). Need at least 350 labeled samples.
+2026-05-25 19:10:33 @whale_ml.modeling [WARNING]: Symbol challenger train failed for REE: Symbol REE data too small (28 rows). Need at least 350 labeled samples.

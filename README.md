@@ -13,10 +13,21 @@ Hệ thống xử lý dữ liệu chứng khoán **real-time** end-to-end, kết
 Pipeline hiện tại: thu thập giá từ Yahoo Finance WebSocket → Kafka → Flink → ClickHouse / ScyllaDB, phân tích sentiment bằng FinBERT, phát hiện changepoint bằng BOCPD, dự báo hậu bất thường bằng Whale ML, hiển thị realtime trên web.
 ClickHouse đóng vai trò **Data Warehouse trung tâm** cho stream analytics và pipeline MLOps.
 
+## 🖼️ Sơ đồ hệ thống
+
+### Data Engineering Pipeline
+
+![Data Engineering Pipeline](image/pipeline_De.jpg)
+
+### MLOps Pipeline
+
+![MLOps Pipeline](image/mlops.jpg)
+
 ---
 
 ## 🗂️ Mục lục
 
+- [Sơ đồ hệ thống](#-sơ-đồ-hệ-thống)
 - [Tổng quan kiến trúc](#-tổng-quan-kiến-trúc)
 - [Luồng dữ liệu](#-luồng-dữ-liệu)
 - [Cấu trúc thư mục](#-cấu-trúc-thư-mục)
